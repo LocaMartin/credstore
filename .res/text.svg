@@ -1,0 +1,18 @@
+<svg width="200" height="80" viewBox="0 0 200 80" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Define the linear gradient for the text fill -->
+    <linearGradient id="textGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#FF0000; stop-opacity:1" /> <!-- Red start -->
+      <stop offset="100%" style="stop-color:#0000FF; stop-opacity:1" /> <!-- Blue end -->
+    </linearGradient>
+  </defs>
+    <text x="100" y="40"
+        text-anchor="middle"
+        dominant-baseline="middle"
+        font-family="Arial, sans-serif"
+        font-weight="bold"
+        font-size="32px"
+        fill="url(#textGradient)">
+    CredStore
+  </text>
+</svg>
