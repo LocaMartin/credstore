@@ -1,3 +1,4 @@
+<!--
 <div align="center">
   <svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 24 24" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
     <defs>
@@ -7,19 +8,16 @@
     <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10" fill="none" stroke="url(#shieldGradient)" />
   </svg>
 </div>
+-->
 
 <div align="center">
-  <span style="font-weight: bold; font-size: 2em;
-               background-image: linear-gradient(to right, #FF0000, #0000FF); /* Red to Blue Gradient */
-               -webkit-background-clip: text; /* For WebKit browsers */
-               -webkit-text-fill-color: transparent; /* For WebKit browsers */
-               background-clip: text; /* Standard */
-               color: transparent;">CredStore</span>
+  <img src="./.res/logo.svg" alt="Your Logo Description">
+  <br> <img src="./.res/text.svg" alt="Your Text Description">
 </div>
 
-<p style="text-align: center; font-size: 1em;"><b>1.0.0</b></p>
+<p align="center"><b>1.0.0</b></p>
 
-### Is a offline personal cross-platform credential management app made with:
+### Is a offline personal cross-platform credential management app made with
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
