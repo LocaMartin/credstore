@@ -39,7 +39,7 @@
 <img src="./.res/login.png" />
 <img src="./.res/dashboard.png" />
 
-### You can download precompiled binaries from [here]()
+### You can download precompiled binaries from [here](https://github.com/LocaMartin/credstore/releases)
 
 ## ✨ Features
 

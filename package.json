@@ -3,6 +3,10 @@
   "version": "1.0.0",
   "private": true,
   "description": "Secure Offline Credential Manager",
+  "author": {
+    "name": "Loca Martin",
+    "email": "locaboyff@gmail.com"
+  },
   "main": "electron/main.js",
   "homepage": "./",
   "scripts": {
