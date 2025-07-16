@@ -162,10 +162,7 @@ npm run android:run
 5. **Secure Storage**: Encrypted data stored locally with salt and IV
    
 >[!WARNING]
->[!WARNING]
->>[!WARNING]
-
- <h2>INCASE YOU FORGOT YOUR PASSWORD/MASTER KEY</h2>
+<h2>INCASE YOU FORGOT YOUR PASSWORD/MASTER KEY</h2>
 
 **There is no way to recover your data if you forget your master password.** 
 > The encryption is designed to be unbreakable, which means:
