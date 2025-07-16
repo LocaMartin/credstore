@@ -161,9 +161,8 @@ npm run android:run
 4. **Data Encryption**: AES-256-GCM encrypts credential data
 5. **Secure Storage**: Encrypted data stored locally with salt and IV
 
-<div style="display: flex; align-items: center; gap: 5px;">
- <img src=".res/warning.svg"/><h2 style="margin: 0;">INCASE YOU FORGOT YOUR PASSWORD/MASTER KEY</h2>
-</div>
+>[!WARNING]
+ <h2>INCASE YOU FORGOT YOUR PASSWORD/MASTER KEY</h2>
 
 **There is no way to recover your data if you forget your master password.** 
 > The encryption is designed to be unbreakable, which means:
