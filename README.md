@@ -160,8 +160,11 @@ npm run android:run
 3. **Key Derivation**: PBKDF2 with 50,000 iterations generates encryption key
 4. **Data Encryption**: AES-256-GCM encrypts credential data
 5. **Secure Storage**: Encrypted data stored locally with salt and IV
-
+   
 >[!WARNING]
+>[!WARNING]
+>>[!WARNING]
+
  <h2>INCASE YOU FORGOT YOUR PASSWORD/MASTER KEY</h2>
 
 **There is no way to recover your data if you forget your master password.** 
