@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: "Release tag to publish, for example v1.0.2"
+        description: "Release tag to publish, for example v1.0.3"
         required: true
         type: string
       submit_winget:
@@ -177,7 +177,7 @@ jobs:
           }
 
           $version = $env:RELEASE_TAG.TrimStart("v")
-          $installerUrl = "https://github.com/LocaMartin/credstore/releases/download/$($env:RELEASE_TAG)/CredStore%20Setup%20$version.exe"
+          $installerUrl = "https://github.com/LocaMartin/credstore/releases/download/$($env:RELEASE_TAG)/CredStore-$version-win-x64.exe"
 
           Invoke-WebRequest https://aka.ms/wingetcreate/latest -OutFile wingetcreate.exe
           .\wingetcreate.exe update LocaMartin.CredStore -u $installerUrl -v $version -t $env:WINGET_CREATE_GITHUB_TOKEN --submit

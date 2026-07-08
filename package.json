@@ -1,6 +1,6 @@
 {
   "name": "credstore",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "private": false,
   "description": "Secure Offline Credential Manager",
   "license": "MIT",
@@ -52,9 +52,9 @@
     "release:windows": "npm run export && electron-builder --win nsis --x64 --ia32 --publish=never",
     "release:mac": "npm run export && electron-builder --mac dmg --x64 --arm64 --publish=never",
     "android:init": "npm run build && npx cap add android",
-    "android:sync": "npm run build && npx cap sync android",
-    "android:build": "npm run build && npx cap sync android && npx cap build android",
-    "android:run": "npm run build && npx cap sync android && npx cap run android",
+    "android:sync": "npm run build && npx cap sync android && node scripts/sync-android-version.js",
+    "android:build": "npm run android:sync && npx cap build android",
+    "android:run": "npm run android:sync && npx cap run android",
     "android:open": "npx cap open android"
   },
   "build": {
@@ -63,6 +63,7 @@
     "directories": {
       "output": "dist"
     },
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
     "compression": "maximum",
     "files": [
       "out/**/*",

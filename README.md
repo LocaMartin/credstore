@@ -3,7 +3,7 @@
   <br> <img src="https://raw.githubusercontent.com/LocaMartin/credstore/main/.res/text.svg" alt="CredStore">
 </div>
 
-<p align="center"><b>1.0.2</b></p>
+<p align="center"><b>1.0.3</b></p>
 
 ### Is a offline personal cross-platform credential management app made with
 
