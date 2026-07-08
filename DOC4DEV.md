@@ -37,14 +37,18 @@ npm run dist-mac
 npm run dist-all
 ```
 
-#### Windows release packaging
+#### Store and package distribution
 
-Windows distribution is GitHub Releases first. The current release workflow builds NSIS installer, portable executable, and zip artifacts for Windows and publishes them to GitHub Releases.
+Paid app-store listings are not the default distribution path for this project.
 
-Microsoft Store packaging is a later step. Do not add Store packaging to the default release workflow until the project is ready for MSIX/appx signing and Store metadata. When ready, use one of these paths:
+- **Android**: use Uptodown.
+- **Windows**: use winget. The current release workflow builds NSIS installer, portable executable, and zip artifacts for GitHub Releases; these artifacts can be used while winget review is pending.
+- **macOS**: use AppDB. GitHub Releases remain available for direct macOS downloads.
 
-1. Add an Electron Builder MSIX-style target for Windows.
-2. Build the normal Windows release artifact and package it on Windows using Microsoft's MSIX Packaging Tool.
+Planned winget command after the manifest is accepted:
+```powershell
+winget install LocaMartin.CredStore
+```
 
 #### Android Version
 ```bash

@@ -1,6 +1,6 @@
 <div align="center">
-  <img src="./.res/logo.svg" alt="Your Logo Description">
-  <br> <img src="./.res/text.svg" alt="Your Text Description">
+  <img src="https://raw.githubusercontent.com/LocaMartin/credstore/main/.res/logo.svg" alt="CredStore logo">
+  <br> <img src="https://raw.githubusercontent.com/LocaMartin/credstore/main/.res/text.svg" alt="CredStore">
 </div>
 
 <p align="center"><b>1.0.1</b></p>
@@ -31,22 +31,27 @@ npm i credstore
 ```
 npm install github.com:LocaMartin/credstore
 ```
-### For android [click](https://play.google.com/store/apps/details?id=com.credstore.app) to download from playstore
+### For Android, use the Uptodown listing when it is published
 ```
-https://play.google.com/store/apps/details?id=com.credstore.app
+https://credstore.en.uptodown.com/android
 ```
 ### To store passwords, API keys, and sensitive data in an organized manner .
 
-<img src="./.res/login.png" />
-<img src="./.res/dashboard.png" />
+<img src="https://raw.githubusercontent.com/LocaMartin/credstore/main/.res/login.png" />
+<img src="https://raw.githubusercontent.com/LocaMartin/credstore/main/.res/dashboard.png" />
 
 ### You can download precompiled binaries from [here](https://github.com/LocaMartin/credstore/releases)
 
-### Windows distribution
+### Store and package distribution
 
-Windows builds are distributed through GitHub Releases first. Download the `.exe`, portable `.exe`, or `.zip` package from the latest release.
+- **Android**: Uptodown.
+- **Windows**: winget. Until the winget manifest is accepted, download the `.exe`, portable `.exe`, or `.zip` package from GitHub Releases.
+- **macOS**: AppDB. GitHub Releases remain available for direct macOS downloads.
 
-Microsoft Store distribution is planned for later. That will require an MSIX/appx package, either by adding an Electron Builder MSIX-style target or by packaging the Windows build with Microsoft's MSIX Packaging Tool on Windows.
+Planned Windows install command after winget acceptance:
+```powershell
+winget install LocaMartin.CredStore
+```
 
 ## Features
 
