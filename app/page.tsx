@@ -73,7 +73,7 @@ interface UnlockScreenProps {
   hasError: boolean
 }
 
-const APP_VERSION = "1.0.3"
+const APP_VERSION = "1.0.4"
 
 // Optimized encryption with reduced memory footprint
 const generateSalt = (): string => {

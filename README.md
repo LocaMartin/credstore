@@ -3,7 +3,7 @@
   <br> <img src="https://raw.githubusercontent.com/LocaMartin/credstore/main/.res/text.svg" alt="CredStore">
 </div>
 
-<p align="center"><b>1.0.3</b></p>
+<p align="center"><b>1.0.4</b></p>
 
 ### Is a offline personal cross-platform credential management app made with
 
@@ -27,6 +27,8 @@
 ```
 npm install -g credstore
 credstore
+# Optional Linux launcher entry:
+credstore --install-desktop
 # Restricted Linux/Kali containers only:
 credstore --no-sandbox
 ```

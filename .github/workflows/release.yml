@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: "Release tag to publish, for example v1.0.3"
+        description: "Release tag to publish, for example v1.0.4"
         required: true
         type: string
       submit_winget:
@@ -124,7 +124,7 @@ jobs:
           fi
 
       - name: Build Android release artifacts
-        run: ./gradlew assembleRelease bundleRelease
+        run: ./gradlew assembleDebug assembleRelease bundleRelease
         working-directory: android
         env:
           ANDROID_KEYSTORE_PATH: ${{ github.workspace }}/android/app/release.keystore
@@ -132,13 +132,32 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
 
+      - name: Prepare Android release files
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ github.event.inputs.tag_name || github.ref_name }}
+        run: |
+          set -euo pipefail
+          version="${RELEASE_TAG#v}"
+          mkdir -p android-release
+
+          if [ -f android/app/build/outputs/apk/release/app-release.apk ]; then
+            cp android/app/build/outputs/apk/release/app-release.apk "android-release/CredStore-${version}-android-release.apk"
+          elif [ -f android/app/build/outputs/apk/debug/app-debug.apk ]; then
+            cp android/app/build/outputs/apk/debug/app-debug.apk "android-release/CredStore-${version}-android-debug.apk"
+          fi
+
+          if [ -f android/app/build/outputs/bundle/release/app-release.aab ]; then
+            cp android/app/build/outputs/bundle/release/app-release.aab "android-release/CredStore-${version}-android-release.aab"
+          fi
+
+          find android-release -maxdepth 1 -type f -print
+
       - name: Upload Android artifacts
         uses: actions/upload-artifact@v4
         with:
           name: CredStore-android
-          path: |
-            android/app/build/outputs/apk/release/*.apk
-            android/app/build/outputs/bundle/release/*.aab
+          path: android-release/*
           if-no-files-found: error
 
   release:

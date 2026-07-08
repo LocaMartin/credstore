@@ -25,6 +25,9 @@
 # misc
 .DS_Store
 *.pem
+*.key
+*.keystore
+*.jks
 
 # debug
 npm-debug.log*
@@ -32,6 +35,8 @@ yarn-debug.log*
 yarn-error.log*
 
 # local env files
+.env
+.env.*
 .env*.local
 
 # vercel

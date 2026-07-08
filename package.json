@@ -1,6 +1,6 @@
 {
   "name": "credstore",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "private": false,
   "description": "Secure Offline Credential Manager",
   "license": "MIT",
@@ -67,7 +67,8 @@
     "compression": "maximum",
     "files": [
       "out/**/*",
-      "electron/**/*"
+      "electron/**/*",
+      "!node_modules/electron/**/*"
     ],
     "linux": {
       "target": [
