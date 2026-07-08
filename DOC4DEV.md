@@ -36,6 +36,16 @@ npm run dist-mac
 # Build for all platforms
 npm run dist-all
 ```
+
+#### Windows release packaging
+
+Windows distribution is GitHub Releases first. The current release workflow builds NSIS installer, portable executable, and zip artifacts for Windows and publishes them to GitHub Releases.
+
+Microsoft Store packaging is a later step. Do not add Store packaging to the default release workflow until the project is ready for MSIX/appx signing and Store metadata. When ready, use one of these paths:
+
+1. Add an Electron Builder MSIX-style target for Windows.
+2. Build the normal Windows release artifact and package it on Windows using Microsoft's MSIX Packaging Tool.
+
 #### Android Version
 ```bash
 # Initialize Android project

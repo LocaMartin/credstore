@@ -42,6 +42,12 @@ https://play.google.com/store/apps/details?id=com.credstore.app
 
 ### You can download precompiled binaries from [here](https://github.com/LocaMartin/credstore/releases)
 
+### Windows distribution
+
+Windows builds are distributed through GitHub Releases first. Download the `.exe`, portable `.exe`, or `.zip` package from the latest release.
+
+Microsoft Store distribution is planned for later. That will require an MSIX/appx package, either by adding an Electron Builder MSIX-style target or by packaging the Windows build with Microsoft's MSIX Packaging Tool on Windows.
+
 ## Features
 
 ### Security First

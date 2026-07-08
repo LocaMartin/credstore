@@ -62,6 +62,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # Windows is intentionally GitHub Releases first: NSIS, portable exe, and zip.
+      # Microsoft Store packaging should be added later as an MSIX/appx-specific step.
+
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
