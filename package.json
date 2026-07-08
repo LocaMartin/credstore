@@ -9,6 +9,9 @@
     "email": "locaboyff@gmail.com"
   },
   "main": "electron/main.js",
+  "bin": {
+    "credstore": "bin/credstore.js"
+  },
   "homepage": "https://github.com/LocaMartin/credstore#readme",
   "repository": {
     "type": "git",
@@ -26,6 +29,7 @@
     "clean:all": "rimraf .next out dist node_modules",
     "build:clean": "npm run clean && npm run build",
     "dist:clean": "npm run clean && npm run dist-linux",
+    "prepack": "npm run export",
     "export": "next build",
     "electron": "electron .",
     "electron-dev": "concurrently \"npm run dev\" \"wait-on http://localhost:3000 && electron .\"",
@@ -130,19 +134,7 @@
     }
   },
   "dependencies": {
-    "@radix-ui/react-alert-dialog": "^1.0.5",
-    "@radix-ui/react-dialog": "^1.0.5",
-    "@radix-ui/react-label": "^2.0.2",
-    "@radix-ui/react-select": "^2.0.0",
-    "@radix-ui/react-slot": "^1.0.2",
-    "@radix-ui/react-tabs": "^1.0.4",
-    "class-variance-authority": "^0.7.0",
-    "clsx": "^2.0.0",
-    "lucide-react": "^0.294.0",
-    "next": "14.0.0",
-    "react": "^18",
-    "react-dom": "^18",
-    "tailwind-merge": "^2.0.0"
+    "electron": "^27.0.0"
   },
   "devDependencies": {
     "@capacitor/android": "^5.5.1",
@@ -158,14 +150,26 @@
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
+    "@radix-ui/react-alert-dialog": "^1.0.5",
+    "@radix-ui/react-dialog": "^1.0.5",
+    "@radix-ui/react-label": "^2.0.2",
+    "@radix-ui/react-select": "^2.0.0",
+    "@radix-ui/react-slot": "^1.0.2",
+    "@radix-ui/react-tabs": "^1.0.4",
     "autoprefixer": "^10.0.1",
+    "class-variance-authority": "^0.7.0",
+    "clsx": "^2.0.0",
     "concurrently": "^8.2.0",
-    "electron": "^27.0.0",
     "electron-builder": "^24.6.4",
     "eslint": "^8",
-    "eslint-config-next": "14.0.0",
+    "eslint-config-next": "14.2.35",
+    "lucide-react": "^0.294.0",
+    "next": "14.2.35",
     "postcss": "^8",
+    "react": "^18",
+    "react-dom": "^18",
     "rimraf": "^6.0.1",
+    "tailwind-merge": "^2.0.0",
     "tailwindcss": "^3.3.0",
     "tailwindcss-animate": "^1.0.7",
     "typescript": "^5",

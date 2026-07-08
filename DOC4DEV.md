@@ -43,12 +43,15 @@ Paid app-store listings are not the default distribution path for this project.
 
 - **Android**: use Uptodown.
 - **Windows**: use winget. The current release workflow builds NSIS installer, portable executable, and zip artifacts for GitHub Releases; these artifacts can be used while winget review is pending.
+- **GitHub Releases**: the release workflow uploads desktop binaries plus Android APK and AAB artifacts.
 - **macOS**: use AppDB. GitHub Releases remain available for direct macOS downloads.
 
 Planned winget command after the manifest is accepted:
 ```powershell
 winget install LocaMartin.CredStore
 ```
+
+Winget automation is available in the release workflow through the `submit_winget` manual input. It requires a `WINGET_CREATE_GITHUB_TOKEN` repository secret with permission to submit pull requests to the winget package repository. The automated step uses the Windows NSIS installer from the GitHub Release.
 
 #### Android Version
 ```bash
@@ -74,6 +77,18 @@ cd android
 # Run on device/emulator
 npm run android:run
 ```
+
+#### Android release signing
+
+The release workflow always builds Android APK and AAB artifacts. Without signing secrets, the APK is generated as `app-release-unsigned.apk`, which is useful for build verification but not for normal distribution.
+
+To publish an installable release APK, add these repository secrets before running the release workflow:
+
+- `ANDROID_KEYSTORE_BASE64`: base64-encoded release keystore file
+- `ANDROID_KEYSTORE_PASSWORD`: keystore password
+- `ANDROID_KEY_ALIAS`: release key alias
+- `ANDROID_KEY_PASSWORD`: release key password
+
 ---
 
 <h1 align="center"><b>Technology Stack</b></h1>

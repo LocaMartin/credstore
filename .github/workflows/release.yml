@@ -10,6 +10,11 @@ on:
         description: "Release tag to publish, for example v1.0.1"
         required: true
         type: string
+      submit_winget:
+        description: "Submit/update winget manifest after publishing the release"
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: write
@@ -80,9 +85,63 @@ jobs:
             !dist/builder-effective-config.yaml
           if-no-files-found: error
 
+  android:
+    name: Build Android APK and AAB
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Sync Android project
+        run: npm run android:sync
+
+      - name: Decode Android signing keystore
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/release.keystore
+          fi
+
+      - name: Build Android release artifacts
+        run: ./gradlew assembleRelease bundleRelease
+        working-directory: android
+        env:
+          ANDROID_KEYSTORE_PATH: ${{ github.workspace }}/android/app/release.keystore
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+
+      - name: Upload Android artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: CredStore-android
+          path: |
+            android/app/build/outputs/apk/release/*.apk
+            android/app/build/outputs/bundle/release/*.aab
+          if-no-files-found: error
+
   release:
     name: Publish GitHub Release
-    needs: build
+    needs:
+      - build
+      - android
     runs-on: ubuntu-latest
     steps:
       - name: Download artifacts
@@ -96,3 +155,25 @@ jobs:
           tag_name: ${{ github.event.inputs.tag_name || github.ref_name }}
           files: release-artifacts/**/*
           generate_release_notes: true
+
+  winget:
+    name: Submit winget Manifest
+    needs: release
+    runs-on: windows-latest
+    if: github.event_name == 'workflow_dispatch' && inputs.submit_winget == true
+    steps:
+      - name: Submit winget update
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ github.event.inputs.tag_name || github.ref_name }}
+          WINGET_CREATE_GITHUB_TOKEN: ${{ secrets.WINGET_CREATE_GITHUB_TOKEN }}
+        run: |
+          if (-not $env:WINGET_CREATE_GITHUB_TOKEN) {
+            throw "Missing WINGET_CREATE_GITHUB_TOKEN repository secret"
+          }
+
+          $version = $env:RELEASE_TAG.TrimStart("v")
+          $installerUrl = "https://github.com/LocaMartin/credstore/releases/download/$($env:RELEASE_TAG)/CredStore%20Setup%20$version.exe"
+
+          Invoke-WebRequest https://aka.ms/wingetcreate/latest -OutFile wingetcreate.exe
+          .\wingetcreate.exe update LocaMartin.CredStore -u $installerUrl -v $version -t $env:WINGET_CREATE_GITHUB_TOKEN --submit
