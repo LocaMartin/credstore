@@ -17,6 +17,11 @@
 /build
 /dist/
 
+# android
+/android/.gradle/
+/android/**/build/
+/android/local.properties
+
 # misc
 .DS_Store
 *.pem
