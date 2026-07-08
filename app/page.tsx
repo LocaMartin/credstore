@@ -1,5 +1,7 @@
 "use client"
 
+/* eslint-disable @next/next/no-img-element */
+
 import type React from "react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Badge } from "@/components/ui/badge"
@@ -59,13 +61,12 @@ import {
   ScanFace,
   Search,
   Settings,
-  Shield,
   Trash2,
   Wifi,
 } from "lucide-react"
 import { ResetCredStore } from "@/components/reset-button"
 
-const APP_VERSION = "1.0.5"
+const APP_VERSION = "1.0.6"
 const MAX_UNLOCK_DELAY_MS = 30000
 
 const THEMES: Record<ThemeName, string> = {
@@ -86,6 +87,10 @@ function categoryIcon(category: CredentialCategory) {
     default:
       return <Settings className="h-4 w-4" />
   }
+}
+
+function LogoMark({ className }: { className: string }) {
+  return <img src="./.res/logo.svg" alt="CredStore" className={className} draggable={false} />
 }
 
 function CredentialCard({
@@ -144,6 +149,11 @@ function CredentialCard({
                 )
               })}
             </div>
+            {credential.notes && (
+              <p className="whitespace-pre-wrap break-words rounded-md border border-white/10 bg-white/5 p-2 text-xs text-gray-200">
+                {credential.notes}
+              </p>
+            )}
           </div>
           <Button
             size="sm"
@@ -179,6 +189,7 @@ export default function CredStore() {
   const [syncCode, setSyncCode] = useState("")
   const [unlockDelayUntil, setUnlockDelayUntil] = useState(0)
   const [failedUnlocks, setFailedUnlocks] = useState(0)
+  const [biometricMessage, setBiometricMessage] = useState("")
   const lastActivityRef = useRef(Date.now())
 
   const themeClass = THEMES[theme]
@@ -335,6 +346,11 @@ export default function CredStore() {
     }
   }, [failedUnlocks, masterPassword, unlockDelayUntil])
 
+  const handleBiometricUnlock = useCallback((type: "fingerprint" | "face") => {
+    const label = type === "fingerprint" ? "Fingerprint" : "Face recognition"
+    setBiometricMessage(`${label} unlock needs native biometric keychain support in the Android or desktop build.`)
+  }, [])
+
   const addField = useCallback(() => {
     setDraft((previous) => ({
       ...previous,
@@ -489,9 +505,7 @@ export default function CredStore() {
       <main className={`min-h-dvh bg-gradient-to-br ${themeClass} flex items-center justify-center p-4`}>
         <Card className="w-full max-w-sm border-white/10 bg-white/5 shadow-lg">
           <CardHeader className="pb-4 text-center">
-            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-purple-500 to-blue-500">
-              <Shield className="h-6 w-6 text-white" />
-            </div>
+            <LogoMark className="mx-auto mb-3 h-12 w-12" />
             <CardTitle className="text-xl font-bold text-white">CredStore</CardTitle>
             <CardDescription className="text-sm text-gray-300">Secure Credential Manager - v{APP_VERSION}</CardDescription>
           </CardHeader>
@@ -513,6 +527,7 @@ export default function CredStore() {
                 autoFocus
               />
               {hasError && <p className="text-xs text-red-400">Invalid master key or corrupted vault data</p>}
+              {biometricMessage && <p className="text-xs text-amber-300">{biometricMessage}</p>}
               {isUnlockDelayed && (
                 <p className="text-xs text-amber-300">
                   Too many failed attempts. Try again in {Math.ceil(unlockDelayRemaining / 1000)}s.
@@ -528,6 +543,27 @@ export default function CredStore() {
               Unlock Vault
             </Button>
             <p className="text-center text-xs text-gray-400">AES-256-GCM encrypted</p>
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="border-white/20 bg-white/5 text-xs text-white hover:bg-white/10"
+                onClick={() => handleBiometricUnlock("fingerprint")}
+              >
+                <Fingerprint className="mr-2 h-4 w-4" />
+                Fingerprint
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="border-white/20 bg-white/5 text-xs text-white hover:bg-white/10"
+                onClick={() => handleBiometricUnlock("face")}
+              >
+                <ScanFace className="mr-2 h-4 w-4" />
+                Face
+              </Button>
+            </div>
+            <p className="text-center text-xs text-gray-400">Biometric unlock needs native keychain support.</p>
             <ResetCredStore />
           </CardContent>
         </Card>
@@ -540,9 +576,7 @@ export default function CredStore() {
       <div className="mx-auto max-w-4xl space-y-4 p-3">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-purple-500 to-blue-500">
-              <Shield className="h-4 w-4 text-white" />
-            </div>
+            <LogoMark className="h-8 w-8" />
             <div>
               <h1 className="text-lg font-bold text-white">CredStore</h1>
               <p className="text-xs text-gray-300">
@@ -710,12 +744,20 @@ export default function CredStore() {
                     Add
                   </Button>
                 </DialogTrigger>
-                <DialogContent className="max-h-[90dvh] max-w-md overflow-y-auto border-gray-700 bg-gray-900/95 text-white">
-                  <DialogHeader>
+                <DialogContent
+                  className={
+                    "grid max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-md " +
+                    "grid-rows-[auto_minmax(0,1fr)] gap-0 overflow-hidden border-gray-700 " +
+                    "bg-gray-900/95 p-0 text-white sm:max-h-[90dvh]"
+                  }
+                >
+                  <DialogHeader className="px-6 pb-3 pt-6">
                     <DialogTitle className="text-sm">Add Credential</DialogTitle>
-                    <DialogDescription className="text-xs text-gray-400">Store named fields like username, password, API secret, URL, token, or anything else.</DialogDescription>
+                    <DialogDescription className="text-xs text-gray-400">
+                      Store named fields like username, password, API secret, URL, token, or anything else.
+                    </DialogDescription>
                   </DialogHeader>
-                  <div className="space-y-3">
+                  <div className="min-h-0 space-y-3 overflow-y-auto overscroll-contain px-6 pb-6">
                     <div className="space-y-1">
                       <Label htmlFor="title" className="text-xs">Title</Label>
                       <Input
@@ -730,7 +772,10 @@ export default function CredStore() {
                       <Label className="text-xs">Fields</Label>
                       <div className="space-y-2">
                         {draft.fields.map((field) => (
-                          <div key={field.id} className="grid grid-cols-[1fr_1fr_auto] gap-1">
+                          <div
+                            key={field.id}
+                            className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-1"
+                          >
                             <Input
                               value={field.key}
                               onChange={(event) => updateDraftField(field.id, { key: event.target.value })}
@@ -800,13 +845,16 @@ export default function CredStore() {
                       <Textarea
                         value={draft.notes}
                         onChange={(event) => setDraft((previous) => ({ ...previous, notes: event.target.value }))}
-                        className="min-h-[64px] border-white/20 bg-white/5 text-sm text-white"
+                        className="min-h-[84px] scroll-mt-24 border-white/20 bg-white/5 text-sm text-white"
                         placeholder="Optional notes"
                       />
                     </div>
                     <Button
                       onClick={addCredential}
-                      className="h-8 w-full bg-gradient-to-r from-purple-500 to-blue-500 text-sm"
+                      className={
+                        "sticky bottom-0 h-10 w-full bg-gradient-to-r from-purple-500 to-blue-500 " +
+                        "text-sm shadow-[0_-12px_24px_rgba(17,24,39,0.95)]"
+                      }
                       disabled={!draft.title || !draft.fields.some((field) => field.key && field.value)}
                     >
                       Add Credential
@@ -822,7 +870,7 @@ export default function CredStore() {
           {filteredCredentials.length === 0 ? (
             <Card className="border-white/10 bg-white/5 shadow-sm">
               <CardContent className="p-6 text-center">
-                <Shield className="mx-auto mb-2 h-12 w-12 text-gray-400" />
+                <LogoMark className="mx-auto mb-2 h-12 w-12 opacity-60" />
                 <h3 className="mb-1 text-lg font-medium text-white">No credentials found</h3>
                 <p className="text-sm text-gray-400">{searchTerm || selectedCategory !== "all" ? "Try adjusting your search." : "Add your first credential."}</p>
               </CardContent>

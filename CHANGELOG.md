@@ -2,6 +2,22 @@
 
 All notable changes to CredStore will be documented in this file.
 
+## [1.0.6] - 2026-07-08
+
+### Fixed
+
+- Replaced the in-app shield icon with the project logo asset at `./.res/logo.svg`.
+- Fixed the Add Credential dialog so the form body scrolls inside the modal on small screens and while the mobile keyboard is open.
+- Made the notes input taller and kept the submit button reachable while typing.
+- Displayed saved credential notes on credential cards.
+- Added fingerprint and face recognition controls to the login form with a clear native-keychain availability message.
+
+### Changed
+
+- Added `README.md.bak` containing the previous README.
+- Updated README badges with the versions of the major project tech stack.
+- Removed Browser extension and Web Workers from the README roadmap.
+
 ## [1.0.5] - 2026-07-08
 
 ### Security
