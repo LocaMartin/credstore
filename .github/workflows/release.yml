@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: "Release tag to publish, for example v1.0.1"
+        description: "Release tag to publish, for example v1.0.2"
         required: true
         type: string
       submit_winget:
@@ -29,21 +29,27 @@ jobs:
         include:
           - os: ubuntu-latest
             target: linux
+            package: AppImage
             arch: x64
           - os: ubuntu-latest
             target: linux
+            package: AppImage
             arch: arm64
           - os: windows-latest
             target: win
+            package: nsis
             arch: x64
           - os: windows-latest
             target: win
+            package: nsis
             arch: ia32
           - os: macos-latest
             target: mac
+            package: dmg
             arch: x64
           - os: macos-latest
             target: mac
+            package: dmg
             arch: arm64
 
     steps:
@@ -63,7 +69,7 @@ jobs:
         run: npm run export
 
       - name: Build Electron binaries
-        run: npx electron-builder --${{ matrix.target }} --${{ matrix.arch }} --publish=never
+        run: npx electron-builder --${{ matrix.target }} ${{ matrix.package }} --${{ matrix.arch }} --publish=never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -78,8 +84,6 @@ jobs:
             dist/*.AppImage
             dist/*.dmg
             dist/*.exe
-            dist/*.zip
-            dist/*.yml
             !dist/**/*.blockmap
             !dist/builder-debug.yml
             !dist/builder-effective-config.yaml

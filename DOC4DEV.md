@@ -42,7 +42,7 @@ npm run dist-all
 Paid app-store listings are not the default distribution path for this project.
 
 - **Android**: use Uptodown.
-- **Windows**: use winget. The current release workflow builds NSIS installer, portable executable, and zip artifacts for GitHub Releases; these artifacts can be used while winget review is pending.
+- **Windows**: use winget. The current release workflow builds NSIS installer artifacts for GitHub Releases; these artifacts can be used while winget review is pending.
 - **GitHub Releases**: the release workflow uploads desktop binaries plus Android APK and AAB artifacts.
 - **macOS**: use AppDB. GitHub Releases remain available for direct macOS downloads.
 
