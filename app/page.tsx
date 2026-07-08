@@ -1,13 +1,10 @@
 "use client"
 
 import type React from "react"
-import { useState, useEffect, memo, useCallback, useMemo, useRef } from "react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Badge } from "@/components/ui/badge"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   Dialog,
   DialogContent,
@@ -16,739 +13,801 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Textarea } from "@/components/ui/textarea"
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog"
+  base64ToBytes,
+  createDraft,
+  createId,
+  createPasswordSlotForKey,
+  decryptWithKey,
+  decryptWithPassword,
+  encryptWithKey,
+  generateVaultKey,
+  importVaultKey,
+  LEGACY_STORAGE_KEY,
+  migrateLegacyCredential,
+  parseVault,
+  readStoredValue,
+  removeStoredValue,
+  THEME_STORAGE_KEY,
+  VAULT_STORAGE_KEY,
+  writeStoredValue,
+  type Credential,
+  type CredentialCategory,
+  type CredentialDraft,
+  type CredentialField,
+  type LegacyCredential,
+  type ThemeName,
+  type VaultData,
+  type VaultRecord,
+} from "@/lib/secure-vault"
 import {
-  Lock,
-  Plus,
-  Search,
+  Copy,
+  Database,
   Eye,
   EyeOff,
-  Copy,
-  Download,
-  Trash2,
-  Shield,
-  Key,
-  Database,
+  Fingerprint,
   Globe,
-  Settings,
+  Key,
+  Lock,
   LogOut,
+  Plus,
+  QrCode,
+  ScanFace,
+  Search,
+  Settings,
+  Shield,
+  Trash2,
+  Wifi,
 } from "lucide-react"
 import { ResetCredStore } from "@/components/reset-button"
 
-interface Credential {
-  id: string
-  title: string
-  username: string
-  password: string
-  url?: string
-  notes?: string
-  category: "website" | "api" | "database" | "other"
-  createdAt: string
-  updatedAt: string
+const APP_VERSION = "1.0.5"
+const MAX_UNLOCK_DELAY_MS = 30000
+
+const THEMES: Record<ThemeName, string> = {
+  indigo: "from-purple-900 via-blue-900 to-indigo-900",
+  emerald: "from-emerald-950 via-teal-900 to-slate-900",
+  slate: "from-slate-950 via-slate-900 to-zinc-900",
+  rose: "from-rose-950 via-fuchsia-950 to-indigo-950",
 }
 
-// Lightweight credential card props
-interface CredentialCardProps {
+function categoryIcon(category: CredentialCategory) {
+  switch (category) {
+    case "website":
+      return <Globe className="h-4 w-4" />
+    case "api":
+      return <Key className="h-4 w-4" />
+    case "database":
+      return <Database className="h-4 w-4" />
+    default:
+      return <Settings className="h-4 w-4" />
+  }
+}
+
+function CredentialCard({
+  credential,
+  visibleFields,
+  onToggleField,
+  onCopy,
+  onDelete,
+}: {
   credential: Credential
-  showPassword: boolean
-  onTogglePassword: () => void
-  onCopyToClipboard: (text: string) => void
+  visibleFields: Set<string>
+  onToggleField: (fieldId: string) => void
+  onCopy: (text: string) => void
   onDelete: () => void
-}
-
-interface UnlockScreenProps {
-  masterPassword: string
-  setMasterPassword: (password: string) => void
-  onUnlock: () => Promise<void>
-  hasError: boolean
-}
-
-const APP_VERSION = "1.0.4"
-
-// Optimized encryption with reduced memory footprint
-const generateSalt = (): string => {
-  const array = new Uint8Array(8) // Reduced from 16 to 8 bytes
-  crypto.getRandomValues(array)
-  return Array.from(array, (byte) => byte.toString(16).padStart(2, "0")).join("")
-}
-
-const deriveKey = async (password: string, salt: string): Promise<CryptoKey> => {
-  const encoder = new TextEncoder()
-  const keyMaterial = await crypto.subtle.importKey("raw", encoder.encode(password), { name: "PBKDF2" }, false, [
-    "deriveKey",
-  ])
-
-  const key = await crypto.subtle.deriveKey(
-    {
-      name: "PBKDF2",
-      salt: encoder.encode(salt),
-      iterations: 100000,
-      hash: "SHA-256",
-    },
-    keyMaterial,
-    { name: "AES-GCM", length: 256 },
-    false,
-    ["encrypt", "decrypt"],
-  )
-
-  return key
-}
-
-const encryptData = async (data: string, password: string) => {
-  const salt = generateSalt()
-  const key = await deriveKey(password, salt)
-  const encoder = new TextEncoder()
-  const iv = crypto.getRandomValues(new Uint8Array(12))
-
-  const encrypted = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, encoder.encode(data))
-
-  return {
-    encrypted: Array.from(new Uint8Array(encrypted)),
-    iv: Array.from(iv),
-    salt,
-  }
-}
-
-const decryptData = async (encryptedData: any, password: string): Promise<string> => {
-  try {
-    const key = await deriveKey(password, encryptedData.salt)
-    const decrypted = await crypto.subtle.decrypt(
-      { name: "AES-GCM", iv: new Uint8Array(encryptedData.iv) },
-      key,
-      new Uint8Array(encryptedData.encrypted),
-    )
-
-    return new TextDecoder().decode(decrypted)
-  } catch (error) {
-    throw new Error("Invalid password or corrupted data")
-  }
-}
-
-// Highly optimized credential card with minimal re-renders
-const CredentialCard = memo<CredentialCardProps>(
-  ({ credential, showPassword, onTogglePassword, onCopyToClipboard, onDelete }) => {
-    // Memoize icon to prevent recreation
-    const categoryIcon = useMemo(() => {
-      switch (credential.category) {
-        case "website":
-          return <Globe className="w-4 h-4" />
-        case "api":
-          return <Key className="w-4 h-4" />
-        case "database":
-          return <Database className="w-4 h-4" />
-        default:
-          return <Settings className="w-4 h-4" />
-      }
-    }, [credential.category])
-
-    // Memoize copy handlers
-    const handleCopyUsername = useCallback(() => {
-      onCopyToClipboard(credential.username)
-    }, [credential.username, onCopyToClipboard])
-
-    const handleCopyPassword = useCallback(() => {
-      onCopyToClipboard(credential.password)
-    }, [credential.password, onCopyToClipboard])
-
-    return (
-      <Card className="bg-white/5 border-white/10 shadow-sm hover:bg-white/10 transition-colors duration-150">
-        <CardContent className="p-3">
-          <div className="flex items-start justify-between">
-            <div className="flex-1 space-y-1 min-w-0">
-              <div className="flex items-center space-x-2">
-                {categoryIcon}
-                <h3 className="font-medium text-white truncate text-sm">{credential.title}</h3>
-                <Badge variant="secondary" className="bg-white/20 text-white border-white/30 text-xs px-1 py-0">
-                  {credential.category}
-                </Badge>
-              </div>
-              <div className="space-y-1 text-xs">
-                <div className="flex items-center space-x-2">
-                  <span className="text-gray-400 w-16 flex-shrink-0">User:</span>
-                  <span className="text-white truncate flex-1 font-mono">{credential.username}</span>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={handleCopyUsername}
-                    className="h-5 w-5 p-0 text-gray-400 hover:text-white hover:bg-white/10 flex-shrink-0"
-                  >
-                    <Copy className="w-3 h-3" />
-                  </Button>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <span className="text-gray-400 w-16 flex-shrink-0">Pass:</span>
-                  <span className="text-white truncate flex-1 font-mono">
-                    {showPassword ? credential.password : "••••••••"}
-                  </span>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={onTogglePassword}
-                    className="h-5 w-5 p-0 text-gray-400 hover:text-white hover:bg-white/10 flex-shrink-0"
-                  >
-                    {showPassword ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={handleCopyPassword}
-                    className="h-5 w-5 p-0 text-gray-400 hover:text-white hover:bg-white/10 flex-shrink-0"
-                  >
-                    <Copy className="w-3 h-3" />
-                  </Button>
-                </div>
-                {credential.url && (
-                  <div className="flex items-center space-x-2">
-                    <span className="text-gray-400 w-16 flex-shrink-0">URL:</span>
-                    <span className="text-blue-300 truncate flex-1 text-xs">{credential.url}</span>
-                  </div>
-                )}
-              </div>
-            </div>
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="text-red-400 hover:text-red-300 hover:bg-red-500/10 ml-2 h-6 w-6 p-0"
-                >
-                  <Trash2 className="w-3 h-3" />
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent className="bg-gray-900/95 border-gray-700 text-white max-w-sm">
-                <AlertDialogHeader>
-                  <AlertDialogTitle className="text-sm">Delete Credential</AlertDialogTitle>
-                  <AlertDialogDescription className="text-gray-400 text-xs">
-                    Delete "{credential.title}"? This cannot be undone.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel className="bg-white/10 border-white/20 text-white hover:bg-white/20 text-xs">
-                    Cancel
-                  </AlertDialogCancel>
-                  <AlertDialogAction onClick={onDelete} className="bg-red-500 hover:bg-red-600 text-white text-xs">
-                    Delete
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          </div>
-        </CardContent>
-      </Card>
-    )
-  },
-)
-CredentialCard.displayName = "CredentialCard"
-
-// Simplified unlock screen
-const UnlockScreen = memo<UnlockScreenProps>(({ masterPassword, setMasterPassword, onUnlock, hasError }) => {
-  const handleKeyPress = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (e.key === "Enter" && masterPassword) {
-        onUnlock()
-      }
-    },
-    [masterPassword, onUnlock],
-  )
-
+}) {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 flex items-center justify-center p-4">
-      <Card className="w-full max-w-sm bg-white/5 border-white/10 shadow-lg">
-        <CardHeader className="text-center pb-4">
-          <div className="mx-auto mb-3 w-12 h-12 bg-gradient-to-br from-purple-500 to-blue-500 rounded-full flex items-center justify-center">
-            <Shield className="w-6 h-6 text-white" />
-          </div>
-          <CardTitle className="text-xl font-bold text-white">CredStore</CardTitle>
-          <CardDescription className="text-gray-300 text-sm">Secure Credential Manager - v{APP_VERSION}</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="space-y-2">
-            <Label htmlFor="master-password" className="text-white text-sm">
-              Master Password
-            </Label>
-            <Input
-              id="master-password"
-              type="password"
-              value={masterPassword}
-              onChange={(e) => setMasterPassword(e.target.value)}
-              className={`bg-white/5 border-white/20 text-white placeholder:text-gray-400 text-sm ${
-                hasError ? "border-red-500" : ""
-              }`}
-              placeholder="Enter master password"
-              onKeyPress={handleKeyPress}
-              autoFocus
-            />
-            {hasError && <p className="text-red-400 text-xs">Invalid master password</p>}
+    <Card className="bg-white/5 border-white/10 shadow-sm hover:bg-white/10">
+      <CardContent className="p-3">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0 flex-1 space-y-2">
+            <div className="flex items-center gap-2">
+              {categoryIcon(credential.category)}
+              <h3 className="truncate text-sm font-medium text-white">{credential.title}</h3>
+              <Badge variant="secondary" className="border-white/30 bg-white/20 px-1 py-0 text-xs text-white">
+                {credential.category}
+              </Badge>
+            </div>
+            <div className="space-y-1 text-xs">
+              {credential.fields.map((field) => {
+                const isVisible = visibleFields.has(field.id)
+                return (
+                  <div className="flex items-center gap-2" key={field.id}>
+                    <span className="w-20 flex-shrink-0 truncate text-gray-400">{field.key}:</span>
+                    <span className="min-w-0 flex-1 truncate font-mono text-white">
+                      {field.secret && !isVisible ? "••••••••" : field.value}
+                    </span>
+                    {field.secret && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => onToggleField(field.id)}
+                        className="h-5 w-5 flex-shrink-0 p-0 text-gray-400 hover:bg-white/10 hover:text-white"
+                      >
+                        {isVisible ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                      </Button>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => onCopy(field.value)}
+                      className="h-5 w-5 flex-shrink-0 p-0 text-gray-400 hover:bg-white/10 hover:text-white"
+                    >
+                      <Copy className="h-3 w-3" />
+                    </Button>
+                  </div>
+                )
+              })}
+            </div>
           </div>
           <Button
-            onClick={onUnlock}
-            className="w-full bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white border-0 text-sm"
-            disabled={!masterPassword}
+            size="sm"
+            variant="ghost"
+            onClick={onDelete}
+            className="h-6 w-6 p-0 text-red-400 hover:bg-red-500/10 hover:text-red-300"
           >
-            <Lock className="w-4 h-4 mr-2" />
-            Unlock Vault
+            <Trash2 className="h-3 w-3" />
           </Button>
-          <p className="text-xs text-gray-400 text-center">AES-256-GCM encrypted</p>
-          <ResetCredStore />
-        </CardContent>
-      </Card>
-    </div>
+        </div>
+      </CardContent>
+    </Card>
   )
-})
-UnlockScreen.displayName = "UnlockScreen"
+}
 
 export default function CredStore() {
   const [isLocked, setIsLocked] = useState(true)
   const [masterPassword, setMasterPassword] = useState("")
   const [credentials, setCredentials] = useState<Credential[]>([])
+  const [vaultRecord, setVaultRecord] = useState<VaultRecord | null>(null)
+  const [vaultKey, setVaultKey] = useState<Uint8Array | null>(null)
+  const [draft, setDraft] = useState<CredentialDraft>(createDraft)
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedCategory, setSelectedCategory] = useState<string>("all")
-  const [showPassword, setShowPassword] = useState<Set<string>>(new Set()) // Use Set for better performance
+  const [visibleFields, setVisibleFields] = useState<Set<string>>(new Set())
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  const [isSyncOpen, setIsSyncOpen] = useState(false)
   const [hasError, setHasError] = useState(false)
-  const [newCredential, setNewCredential] = useState({
-    title: "",
-    username: "",
-    password: "",
-    url: "",
-    notes: "",
-    category: "website" as const,
-  })
-
-  // Use refs to avoid recreating functions
-  const saveTimeoutRef = useRef<NodeJS.Timeout>()
+  const [theme, setTheme] = useState<ThemeName>("indigo")
+  const [newMasterKey, setNewMasterKey] = useState("")
+  const [newMasterKeyLabel, setNewMasterKeyLabel] = useState("Backup password")
+  const [syncCode, setSyncCode] = useState("")
+  const [unlockDelayUntil, setUnlockDelayUntil] = useState(0)
+  const [failedUnlocks, setFailedUnlocks] = useState(0)
   const lastActivityRef = useRef(Date.now())
 
-  // Cleanup function
-  const cleanup = useCallback(() => {
-    setMasterPassword("")
-    setCredentials([])
-    setShowPassword(new Set())
-    setHasError(false)
-    setSearchTerm("")
-    setSelectedCategory("all")
-    setNewCredential({
-      title: "",
-      username: "",
-      password: "",
-      url: "",
-      notes: "",
-      category: "website",
-    })
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current)
-    }
-  }, [])
+  const themeClass = THEMES[theme]
+  const unlockDelayRemaining = Math.max(0, unlockDelayUntil - Date.now())
+  const isUnlockDelayed = unlockDelayRemaining > 0
 
-  const handleLock = useCallback(() => {
-    setIsLocked(true)
-    cleanup()
-  }, [cleanup])
+  const persistVault = useCallback(
+    async (nextCredentials: Credential[], nextRecord = vaultRecord, nextKey = vaultKey) => {
+      if (!nextRecord || !nextKey) return false
 
-  // Optimized save with debouncing
-  const saveToStorage = useCallback(
-    async (credentialsToSave: Credential[]) => {
-      if (!masterPassword) return false
-
-      try {
-        // Clear previous timeout
-        if (saveTimeoutRef.current) {
-          clearTimeout(saveTimeoutRef.current)
-        }
-
-        // Debounce save operation
-        return new Promise<boolean>((resolve) => {
-          saveTimeoutRef.current = setTimeout(async () => {
-            try {
-              const dataToEncrypt = JSON.stringify(credentialsToSave)
-              const encryptedData = await encryptData(dataToEncrypt, masterPassword)
-              localStorage.setItem("credstore_data", JSON.stringify(encryptedData))
-              resolve(true)
-            } catch (error) {
-              console.error("Save failed:", error)
-              resolve(false)
-            }
-          }, 500) // 500ms debounce
-        })
-      } catch (error) {
-        console.error("Save setup failed:", error)
-        return false
+      const key = await importVaultKey(nextKey)
+      const updatedRecord: VaultRecord = {
+        ...nextRecord,
+        payload: await encryptWithKey(JSON.stringify({ credentials: nextCredentials } satisfies VaultData), key),
+        updatedAt: new Date().toISOString(),
       }
+
+      await writeStoredValue(VAULT_STORAGE_KEY, JSON.stringify(updatedRecord))
+      setVaultRecord(updatedRecord)
+      return true
     },
-    [masterPassword],
+    [vaultKey, vaultRecord],
   )
 
-  // Initialize app
-  useEffect(() => {
-    const savedData = localStorage.getItem("credstore_data")
+  const lockVault = useCallback(() => {
     setIsLocked(true)
-    if (!savedData) {
-      cleanup()
-    }
-  }, [cleanup])
+    setMasterPassword("")
+    setCredentials([])
+    setVaultRecord(null)
+    setVaultKey(null)
+    setVisibleFields(new Set())
+    setSearchTerm("")
+    setSelectedCategory("all")
+    setHasError(false)
+    setUnlockDelayUntil(0)
+    setFailedUnlocks(0)
+    setDraft(createDraft())
+  }, [])
 
-  // Auto-lock and cleanup
   useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.hidden && !isLocked) {
-        handleLock()
-      }
+    const boot = async () => {
+      const storedTheme = await readStoredValue(THEME_STORAGE_KEY)
+      if (storedTheme && storedTheme in THEMES) setTheme(storedTheme as ThemeName)
+      setIsLocked(true)
     }
 
-    const handleBeforeUnload = () => {
-      cleanup()
-    }
+    boot()
+  }, [])
 
-    // Auto-lock timer
-    const autoLockInterval = setInterval(() => {
-      if (!isLocked && Date.now() - lastActivityRef.current > 300000) {
-        // 5 minutes
-        handleLock()
-      }
-    }, 30000) // Check every 30 seconds
-
-    // Activity tracking
+  useEffect(() => {
     const updateActivity = () => {
       lastActivityRef.current = Date.now()
     }
 
-    document.addEventListener("visibilitychange", handleVisibilityChange)
-    window.addEventListener("beforeunload", handleBeforeUnload)
+    const autoLockInterval = setInterval(() => {
+      if (!isLocked && Date.now() - lastActivityRef.current > 300000) lockVault()
+    }, 30000)
+
     document.addEventListener("mousedown", updateActivity)
     document.addEventListener("keydown", updateActivity)
+    document.addEventListener("touchstart", updateActivity)
 
     return () => {
-      document.removeEventListener("visibilitychange", handleVisibilityChange)
-      window.removeEventListener("beforeunload", handleBeforeUnload)
+      clearInterval(autoLockInterval)
       document.removeEventListener("mousedown", updateActivity)
       document.removeEventListener("keydown", updateActivity)
-      clearInterval(autoLockInterval)
-      cleanup()
+      document.removeEventListener("touchstart", updateActivity)
     }
-  }, [isLocked, handleLock, cleanup])
+  }, [isLocked, lockVault])
 
-  // Optimized unlock
+  useEffect(() => {
+    if (!isLocked || !isUnlockDelayed) return
+
+    const timer = window.setTimeout(() => setUnlockDelayUntil(0), unlockDelayRemaining)
+    return () => window.clearTimeout(timer)
+  }, [isLocked, isUnlockDelayed, unlockDelayRemaining])
+
   const handleUnlock = useCallback(async () => {
-    if (!masterPassword?.trim()) {
+    if (Date.now() < unlockDelayUntil) return
+
+    if (!masterPassword.trim()) {
       setHasError(true)
       return
     }
 
     try {
       setHasError(false)
-      const savedData = localStorage.getItem("credstore_data")
+      const storedVault = parseVault(await readStoredValue(VAULT_STORAGE_KEY))
 
-      if (savedData) {
-        const encryptedData = JSON.parse(savedData)
-        const decryptedData = await decryptData(encryptedData, masterPassword)
-        const parsedCredentials = JSON.parse(decryptedData)
+      if (storedVault) {
+        const passwordSlots = storedVault.keySlots.filter((slot) => slot.enabled && slot.type === "password")
 
-        if (Array.isArray(parsedCredentials)) {
-          setCredentials(parsedCredentials)
-          setIsLocked(false)
-          lastActivityRef.current = Date.now()
-        } else {
-          throw new Error("Invalid data")
+        for (const slot of passwordSlots) {
+          if (!slot.wrappedKey) continue
+
+          try {
+            const unwrapped = await decryptWithPassword(slot.wrappedKey, masterPassword)
+            const nextVaultKey = base64ToBytes(unwrapped)
+            const vaultCryptoKey = await importVaultKey(nextVaultKey)
+            const decryptedVault = JSON.parse(await decryptWithKey(storedVault.payload, vaultCryptoKey)) as VaultData
+
+            setVaultRecord(storedVault)
+            setVaultKey(nextVaultKey)
+            setCredentials(decryptedVault.credentials || [])
+            setIsLocked(false)
+            setMasterPassword("")
+            setFailedUnlocks(0)
+            setUnlockDelayUntil(0)
+            lastActivityRef.current = Date.now()
+            return
+          } catch {
+            // Try the next enabled password slot.
+          }
         }
-      } else {
-        setCredentials([])
-        setIsLocked(false)
-        lastActivityRef.current = Date.now()
+
+        throw new Error("Invalid master key")
       }
-    } catch (error) {
+
+      const legacyData = await readStoredValue(LEGACY_STORAGE_KEY)
+      const nextVaultKey = generateVaultKey()
+      const migratedCredentials = legacyData
+        ? (JSON.parse(await decryptWithPassword(JSON.parse(legacyData), masterPassword)) as LegacyCredential[]).map(
+            migrateLegacyCredential,
+          )
+        : []
+      const vaultCryptoKey = await importVaultKey(nextVaultKey)
+      const createdAt = new Date().toISOString()
+      const nextRecord: VaultRecord = {
+        version: 2,
+        payload: await encryptWithKey(JSON.stringify({ credentials: migratedCredentials } satisfies VaultData), vaultCryptoKey),
+        keySlots: [await createPasswordSlotForKey(nextVaultKey, masterPassword, "Master password")],
+        createdAt,
+        updatedAt: createdAt,
+      }
+
+      await writeStoredValue(VAULT_STORAGE_KEY, JSON.stringify(nextRecord))
+      if (legacyData) await removeStoredValue(LEGACY_STORAGE_KEY)
+      setVaultRecord(nextRecord)
+      setVaultKey(nextVaultKey)
+      setCredentials(migratedCredentials)
+      setIsLocked(false)
+      setMasterPassword("")
+      setFailedUnlocks(0)
+      setUnlockDelayUntil(0)
+      lastActivityRef.current = Date.now()
+    } catch {
+      const nextFailures = failedUnlocks + 1
+      const delayMs = Math.min(MAX_UNLOCK_DELAY_MS, 500 * 2 ** Math.max(0, nextFailures - 1))
+
       setHasError(true)
       setMasterPassword("")
+      setFailedUnlocks(nextFailures)
+      setUnlockDelayUntil(Date.now() + delayMs)
     }
-  }, [masterPassword])
+  }, [failedUnlocks, masterPassword, unlockDelayUntil])
 
-  // Optimized password generation
-  const generatePassword = useCallback(() => {
-    const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*"
-    const array = new Uint8Array(12) // Reduced length
-    crypto.getRandomValues(array)
-    const password = Array.from(array, (byte) => charset[byte % charset.length]).join("")
-    setNewCredential((prev) => ({ ...prev, password }))
+  const addField = useCallback(() => {
+    setDraft((previous) => ({
+      ...previous,
+      fields: [...previous.fields, { id: createId(), key: "Custom field", value: "", secret: false }],
+    }))
   }, [])
 
-  // Optimized credential operations
+  const updateDraftField = useCallback((id: string, patch: Partial<CredentialField>) => {
+    setDraft((previous) => ({
+      ...previous,
+      fields: previous.fields.map((field) => (field.id === id ? { ...field, ...patch } : field)),
+    }))
+  }, [])
+
+  const removeDraftField = useCallback((id: string) => {
+    setDraft((previous) => ({ ...previous, fields: previous.fields.filter((field) => field.id !== id) }))
+  }, [])
+
+  const generatePassword = useCallback((fieldId: string) => {
+    const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*"
+    const array = new Uint8Array(18)
+    crypto.getRandomValues(array)
+    updateDraftField(fieldId, { value: Array.from(array, (byte) => charset[byte % charset.length]).join(""), secret: true })
+  }, [updateDraftField])
+
   const addCredential = useCallback(async () => {
+    const fields = draft.fields
+      .map((field) => ({ ...field, key: field.key.trim(), value: field.value.trim() }))
+      .filter((field) => field.key && field.value)
+
+    if (!draft.title.trim() || fields.length === 0) return
+
+    const now = new Date().toISOString()
     const credential: Credential = {
-      id: Date.now().toString(),
-      ...newCredential,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      id: createId(),
+      title: draft.title.trim(),
+      category: draft.category,
+      fields,
+      notes: draft.notes.trim(),
+      createdAt: now,
+      updatedAt: now,
     }
-
-    const updatedCredentials = [...credentials, credential]
-    setCredentials(updatedCredentials)
-    saveToStorage(updatedCredentials)
-
-    setNewCredential({
-      title: "",
-      username: "",
-      password: "",
-      url: "",
-      notes: "",
-      category: "website",
-    })
+    const nextCredentials = [...credentials, credential]
+    setCredentials(nextCredentials)
+    await persistVault(nextCredentials)
+    setDraft(createDraft())
     setIsAddDialogOpen(false)
-  }, [credentials, newCredential, saveToStorage])
+  }, [credentials, draft, persistVault])
 
   const deleteCredential = useCallback(
     async (id: string) => {
-      const updatedCredentials = credentials.filter((cred) => cred.id !== id)
-      setCredentials(updatedCredentials)
-      saveToStorage(updatedCredentials)
-      // Remove from showPassword set
-      setShowPassword((prev) => {
-        const newSet = new Set(prev)
-        newSet.delete(id)
-        return newSet
-      })
+      const nextCredentials = credentials.filter((credential) => credential.id !== id)
+      setCredentials(nextCredentials)
+      await persistVault(nextCredentials)
     },
-    [credentials, saveToStorage],
+    [credentials, persistVault],
   )
 
-  // Optimized clipboard copy
   const copyToClipboard = useCallback((text: string) => {
-    if (navigator.clipboard) {
-      navigator.clipboard.writeText(text).catch(() => {
-        // Fallback
-        const textArea = document.createElement("textarea")
-        textArea.value = text
-        textArea.style.position = "fixed"
-        textArea.style.opacity = "0"
-        document.body.appendChild(textArea)
-        textArea.select()
-        document.execCommand("copy")
-        document.body.removeChild(textArea)
-      })
-    }
-  }, [])
-
-  const exportData = useCallback(() => {
-    const dataStr = JSON.stringify(credentials, null, 2)
-    const dataBlob = new Blob([dataStr], { type: "application/json" })
-    const url = URL.createObjectURL(dataBlob)
-    const link = document.createElement("a")
-    link.href = url
-    link.download = `credstore-backup-${new Date().toISOString().split("T")[0]}.json`
-    link.click()
-    URL.revokeObjectURL(url)
-  }, [credentials])
-
-  const togglePasswordVisibility = useCallback((id: string) => {
-    setShowPassword((prev) => {
-      const newSet = new Set(prev)
-      if (newSet.has(id)) {
-        newSet.delete(id)
-      } else {
-        newSet.add(id)
-      }
-      return newSet
+    navigator.clipboard?.writeText(text).catch(() => {
+      const textarea = document.createElement("textarea")
+      textarea.value = text
+      textarea.style.position = "fixed"
+      textarea.style.opacity = "0"
+      document.body.appendChild(textarea)
+      textarea.select()
+      document.execCommand("copy")
+      document.body.removeChild(textarea)
     })
   }, [])
 
-  // Memoized filtered credentials with virtual scrolling consideration
-  const filteredCredentials = useMemo(() => {
-    if (!searchTerm && selectedCategory === "all") return credentials
+  const addPasswordMasterKey = useCallback(async () => {
+    if (!vaultRecord || !vaultKey || !newMasterKey.trim()) return
 
-    return credentials.filter((cred) => {
+    const slot = await createPasswordSlotForKey(vaultKey, newMasterKey, newMasterKeyLabel.trim() || "Backup password")
+    const nextRecord: VaultRecord = { ...vaultRecord, keySlots: [...vaultRecord.keySlots, slot] }
+    setVaultRecord(nextRecord)
+    await persistVault(credentials, nextRecord, vaultKey)
+    setNewMasterKey("")
+    setNewMasterKeyLabel("Backup password")
+  }, [credentials, newMasterKey, newMasterKeyLabel, persistVault, vaultKey, vaultRecord])
+
+  const addNativePlaceholder = useCallback(
+    async (type: "fingerprint" | "face") => {
+      if (!vaultRecord || !vaultKey) return
+
+      const label = type === "fingerprint" ? "Fingerprint master key" : "Face master key"
+      const nextRecord: VaultRecord = {
+        ...vaultRecord,
+        keySlots: [...vaultRecord.keySlots, { id: createId(), type, label, enabled: false }],
+      }
+      setVaultRecord(nextRecord)
+      await persistVault(credentials, nextRecord, vaultKey)
+    },
+    [credentials, persistVault, vaultKey, vaultRecord],
+  )
+
+  const removeMasterKey = useCallback(
+    async (slotId: string) => {
+      if (!vaultRecord || !vaultKey) return
+
+      const enabledPasswordSlots = vaultRecord.keySlots.filter((slot) => slot.enabled && slot.type === "password")
+      const slot = vaultRecord.keySlots.find((item) => item.id === slotId)
+      if (slot?.type === "password" && enabledPasswordSlots.length <= 1) return
+
+      const nextRecord: VaultRecord = {
+        ...vaultRecord,
+        keySlots: vaultRecord.keySlots.filter((item) => item.id !== slotId),
+      }
+      setVaultRecord(nextRecord)
+      await persistVault(credentials, nextRecord, vaultKey)
+    },
+    [credentials, persistVault, vaultKey, vaultRecord],
+  )
+
+  const changeTheme = useCallback(async (nextTheme: ThemeName) => {
+    setTheme(nextTheme)
+    await writeStoredValue(THEME_STORAGE_KEY, nextTheme)
+  }, [])
+
+  const createSyncCode = useCallback(() => {
+    const code = Array.from(crypto.getRandomValues(new Uint8Array(6)), (value) => (value % 10).toString()).join("")
+    setSyncCode(code)
+  }, [])
+
+  const toggleFieldVisibility = useCallback((fieldId: string) => {
+    setVisibleFields((previous) => {
+      const next = new Set(previous)
+      if (next.has(fieldId)) next.delete(fieldId)
+      else next.add(fieldId)
+      return next
+    })
+  }, [])
+
+  const filteredCredentials = useMemo(() => {
+    return credentials.filter((credential) => {
+      const search = searchTerm.trim().toLowerCase()
+      const matchesCategory = selectedCategory === "all" || credential.category === selectedCategory
       const matchesSearch =
-        !searchTerm ||
-        cred.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        cred.username.toLowerCase().includes(searchTerm.toLowerCase())
-      const matchesCategory = selectedCategory === "all" || cred.category === selectedCategory
-      return matchesSearch && matchesCategory
+        !search ||
+        credential.title.toLowerCase().includes(search) ||
+        credential.fields.some(
+          (field) => field.key.toLowerCase().includes(search) || (!field.secret && field.value.toLowerCase().includes(search)),
+        )
+
+      return matchesCategory && matchesSearch
     })
   }, [credentials, searchTerm, selectedCategory])
 
   if (isLocked) {
     return (
-      <UnlockScreen
-        masterPassword={masterPassword}
-        setMasterPassword={setMasterPassword}
-        onUnlock={handleUnlock}
-        hasError={hasError}
-      />
+      <main className={`min-h-dvh bg-gradient-to-br ${themeClass} flex items-center justify-center p-4`}>
+        <Card className="w-full max-w-sm border-white/10 bg-white/5 shadow-lg">
+          <CardHeader className="pb-4 text-center">
+            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-purple-500 to-blue-500">
+              <Shield className="h-6 w-6 text-white" />
+            </div>
+            <CardTitle className="text-xl font-bold text-white">CredStore</CardTitle>
+            <CardDescription className="text-sm text-gray-300">Secure Credential Manager - v{APP_VERSION}</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="space-y-2">
+              <Label htmlFor="master-password" className="text-sm text-white">
+                Master Key
+              </Label>
+              <Input
+                id="master-password"
+                type="password"
+                value={masterPassword}
+                onChange={(event) => setMasterPassword(event.target.value)}
+                className={`bg-white/5 text-sm text-white placeholder:text-gray-400 ${hasError ? "border-red-500" : "border-white/20"}`}
+                placeholder="Enter or create master key"
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") handleUnlock()
+                }}
+                autoFocus
+              />
+              {hasError && <p className="text-xs text-red-400">Invalid master key or corrupted vault data</p>}
+              {isUnlockDelayed && (
+                <p className="text-xs text-amber-300">
+                  Too many failed attempts. Try again in {Math.ceil(unlockDelayRemaining / 1000)}s.
+                </p>
+              )}
+            </div>
+            <Button
+              onClick={handleUnlock}
+              className="w-full border-0 bg-gradient-to-r from-purple-500 to-blue-500 text-sm text-white hover:from-purple-600 hover:to-blue-600"
+              disabled={!masterPassword || isUnlockDelayed}
+            >
+              <Lock className="mr-2 h-4 w-4" />
+              Unlock Vault
+            </Button>
+            <p className="text-center text-xs text-gray-400">AES-256-GCM encrypted</p>
+            <ResetCredStore />
+          </CardContent>
+        </Card>
+      </main>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900">
-      <div className="container mx-auto p-3 space-y-4 max-w-4xl">
-        {/* Compact Header */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-blue-500 rounded-full flex items-center justify-center">
-              <Shield className="w-4 h-4 text-white" />
+    <main className={`min-h-dvh bg-gradient-to-br ${themeClass}`}>
+      <div className="mx-auto max-w-4xl space-y-4 p-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-purple-500 to-blue-500">
+              <Shield className="h-4 w-4 text-white" />
             </div>
             <div>
               <h1 className="text-lg font-bold text-white">CredStore</h1>
-              <p className="text-gray-300 text-xs">
+              <p className="text-xs text-gray-300">
                 {credentials.length} credentials - v{APP_VERSION}
               </p>
             </div>
           </div>
-          <div className="flex items-center space-x-1">
-            <Button
-              onClick={exportData}
-              variant="outline"
-              size="sm"
-              className="bg-white/5 border-white/20 text-white hover:bg-white/10 text-xs px-2 py-1"
-            >
-              <Download className="w-3 h-3 mr-1" />
-              Export
-            </Button>
-            <Button
-              onClick={handleLock}
-              variant="outline"
-              size="sm"
-              className="bg-white/5 border-white/20 text-white hover:bg-white/10 text-xs px-2 py-1"
-            >
-              <LogOut className="w-3 h-3 mr-1" />
+          <div className="flex items-center gap-1">
+            <Dialog open={isSyncOpen} onOpenChange={setIsSyncOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline" size="sm" className="border-white/20 bg-white/5 px-2 py-1 text-xs text-white hover:bg-white/10">
+                  <Wifi className="mr-1 h-3 w-3" />
+                  Sync
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-sm border-gray-700 bg-gray-900/95 text-white">
+                <DialogHeader>
+                  <DialogTitle className="text-sm">Local Device Sync</DialogTitle>
+                  <DialogDescription className="text-xs text-gray-400">
+                    Device-to-device sync will use a one-time pairing code before Bluetooth or Wi-Fi transfer.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-3">
+                  <div className="rounded-md border border-white/10 bg-white/5 p-4 text-center">
+                    <QrCode className="mx-auto mb-2 h-10 w-10 text-gray-300" />
+                    <p className="font-mono text-2xl tracking-[0.35em] text-white">{syncCode || "------"}</p>
+                    <p className="mt-2 text-xs text-gray-400">Native QR scan and local transport plugins are required for transfer.</p>
+                  </div>
+                  <Button onClick={createSyncCode} className="w-full bg-gradient-to-r from-purple-500 to-blue-500 text-sm">
+                    Generate One-Time Code
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+            <Dialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline" size="sm" className="border-white/20 bg-white/5 px-2 py-1 text-xs text-white hover:bg-white/10">
+                  <Settings className="mr-1 h-3 w-3" />
+                  Settings
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-md border-gray-700 bg-gray-900/95 text-white">
+                <DialogHeader>
+                  <DialogTitle className="text-sm">Settings</DialogTitle>
+                  <DialogDescription className="text-xs text-gray-400">Theme and master key settings are only available after login.</DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label className="text-xs">Theme</Label>
+                    <Select value={theme} onValueChange={(value) => changeTheme(value as ThemeName)}>
+                      <SelectTrigger className="border-white/20 bg-white/5 text-white">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="border-gray-700 bg-gray-900/95 text-white">
+                        <SelectItem value="indigo">Indigo</SelectItem>
+                        <SelectItem value="emerald">Emerald</SelectItem>
+                        <SelectItem value="slate">Slate</SelectItem>
+                        <SelectItem value="rose">Rose</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs">Master Keys</Label>
+                    <div className="space-y-2">
+                      {vaultRecord?.keySlots.map((slot) => (
+                        <div
+                          key={slot.id}
+                          className="flex items-center justify-between rounded-md border border-white/10 bg-white/5 px-3 py-2 text-xs"
+                        >
+                          <div className="flex items-center gap-2">
+                            {slot.type === "password" && <Key className="h-3 w-3" />}
+                            {slot.type === "fingerprint" && <Fingerprint className="h-3 w-3" />}
+                            {slot.type === "face" && <ScanFace className="h-3 w-3" />}
+                            <span>{slot.label}</span>
+                            {!slot.enabled && <Badge className="bg-white/10 text-gray-300">native plugin needed</Badge>}
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => removeMasterKey(slot.id)}
+                            className="h-6 px-2 text-red-300 hover:bg-red-500/10"
+                          >
+                            Remove
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1fr]">
+                      <Input
+                        value={newMasterKeyLabel}
+                        onChange={(event) => setNewMasterKeyLabel(event.target.value)}
+                        className="border-white/20 bg-white/5 text-sm text-white"
+                        placeholder="Label"
+                      />
+                      <Input
+                        value={newMasterKey}
+                        onChange={(event) => setNewMasterKey(event.target.value)}
+                        className="border-white/20 bg-white/5 text-sm text-white"
+                        placeholder="New password key"
+                        type="password"
+                      />
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      <Button
+                        onClick={addPasswordMasterKey}
+                        className="bg-gradient-to-r from-purple-500 to-blue-500 text-xs"
+                        disabled={!newMasterKey}
+                      >
+                        Add Password
+                      </Button>
+                      <Button
+                        onClick={() => addNativePlaceholder("fingerprint")}
+                        variant="outline"
+                        className="border-white/20 bg-white/5 text-xs text-white hover:bg-white/10"
+                      >
+                        Fingerprint
+                      </Button>
+                      <Button
+                        onClick={() => addNativePlaceholder("face")}
+                        variant="outline"
+                        className="border-white/20 bg-white/5 text-xs text-white hover:bg-white/10"
+                      >
+                        Face
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
+            <Button onClick={lockVault} variant="outline" size="sm" className="border-white/20 bg-white/5 px-2 py-1 text-xs text-white hover:bg-white/10">
+              <LogOut className="mr-1 h-3 w-3" />
               Lock
             </Button>
           </div>
         </div>
 
-        {/* Compact Search and Filter */}
-        <Card className="bg-white/5 border-white/10 shadow-sm">
+        <Card className="border-white/10 bg-white/5 shadow-sm">
           <CardContent className="p-3">
-            <div className="flex flex-col sm:flex-row gap-2">
-              <div className="flex-1 relative">
-                <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400 w-3 h-3" />
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <div className="relative flex-1">
+                <Search className="absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-gray-400" />
                 <Input
                   placeholder="Search..."
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-7 bg-white/5 border-white/20 text-white placeholder:text-gray-400 text-sm h-8"
+                  onChange={(event) => setSearchTerm(event.target.value)}
+                  className="h-8 border-white/20 bg-white/5 pl-7 text-sm text-white placeholder:text-gray-400"
                 />
               </div>
               <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-                <SelectTrigger className="w-full sm:w-32 bg-white/5 border-white/20 text-white text-sm h-8">
+                <SelectTrigger className="h-8 w-full border-white/20 bg-white/5 text-sm text-white sm:w-32">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent className="bg-gray-900/95 border-gray-700">
-                  <SelectItem value="all" className="text-white hover:bg-white/10 text-sm">
-                    All
-                  </SelectItem>
-                  <SelectItem value="website" className="text-white hover:bg-white/10 text-sm">
-                    Web
-                  </SelectItem>
-                  <SelectItem value="api" className="text-white hover:bg-white/10 text-sm">
-                    API
-                  </SelectItem>
-                  <SelectItem value="database" className="text-white hover:bg-white/10 text-sm">
-                    DB
-                  </SelectItem>
-                  <SelectItem value="other" className="text-white hover:bg-white/10 text-sm">
-                    Other
-                  </SelectItem>
+                <SelectContent className="border-gray-700 bg-gray-900/95 text-white">
+                  <SelectItem value="all">All</SelectItem>
+                  <SelectItem value="website">Website</SelectItem>
+                  <SelectItem value="api">API</SelectItem>
+                  <SelectItem value="database">Database</SelectItem>
+                  <SelectItem value="other">Other</SelectItem>
                 </SelectContent>
               </Select>
               <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
                 <DialogTrigger asChild>
-                  <Button className="bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white text-sm h-8 px-3">
-                    <Plus className="w-3 h-3 mr-1" />
+                  <Button className="h-8 bg-gradient-to-r from-purple-500 to-blue-500 px-3 text-sm text-white hover:from-purple-600 hover:to-blue-600">
+                    <Plus className="mr-1 h-3 w-3" />
                     Add
                   </Button>
                 </DialogTrigger>
-                <DialogContent className="bg-gray-900/95 border-gray-700 text-white max-w-sm">
+                <DialogContent className="max-h-[90dvh] max-w-md overflow-y-auto border-gray-700 bg-gray-900/95 text-white">
                   <DialogHeader>
                     <DialogTitle className="text-sm">Add Credential</DialogTitle>
-                    <DialogDescription className="text-gray-400 text-xs">
-                      Store a new credential securely.
-                    </DialogDescription>
+                    <DialogDescription className="text-xs text-gray-400">Store named fields like username, password, API secret, URL, token, or anything else.</DialogDescription>
                   </DialogHeader>
                   <div className="space-y-3">
                     <div className="space-y-1">
-                      <Label htmlFor="title" className="text-xs">
-                        Title
-                      </Label>
+                      <Label htmlFor="title" className="text-xs">Title</Label>
                       <Input
                         id="title"
-                        value={newCredential.title}
-                        onChange={(e) => setNewCredential((prev) => ({ ...prev, title: e.target.value }))}
-                        className="bg-white/5 border-white/20 text-white text-sm h-8"
-                        placeholder="Gmail Account"
+                        value={draft.title}
+                        onChange={(event) => setDraft((previous) => ({ ...previous, title: event.target.value }))}
+                        className="h-8 border-white/20 bg-white/5 text-sm text-white"
+                        placeholder="Google"
                       />
                     </div>
                     <div className="space-y-1">
-                      <Label htmlFor="username" className="text-xs">
-                        Username
-                      </Label>
-                      <Input
-                        id="username"
-                        value={newCredential.username}
-                        onChange={(e) => setNewCredential((prev) => ({ ...prev, username: e.target.value }))}
-                        className="bg-white/5 border-white/20 text-white text-sm h-8"
-                        placeholder="user@example.com"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label htmlFor="password" className="text-xs">
-                        Password
-                      </Label>
-                      <div className="flex space-x-1">
-                        <Input
-                          id="password"
-                          value={newCredential.password}
-                          onChange={(e) => setNewCredential((prev) => ({ ...prev, password: e.target.value }))}
-                          className="bg-white/5 border-white/20 text-white flex-1 text-sm h-8"
-                          placeholder="Password"
-                        />
-                        <Button
-                          type="button"
-                          onClick={generatePassword}
-                          variant="outline"
-                          className="bg-white/5 border-white/20 text-white hover:bg-white/10 text-xs px-2 h-8"
-                        >
-                          Gen
-                        </Button>
+                      <Label className="text-xs">Fields</Label>
+                      <div className="space-y-2">
+                        {draft.fields.map((field) => (
+                          <div key={field.id} className="grid grid-cols-[1fr_1fr_auto] gap-1">
+                            <Input
+                              value={field.key}
+                              onChange={(event) => updateDraftField(field.id, { key: event.target.value })}
+                              className="h-8 border-white/20 bg-white/5 text-sm text-white"
+                              placeholder="Key"
+                            />
+                            <div className="flex gap-1">
+                              <Input
+                                value={field.value}
+                                onChange={(event) => updateDraftField(field.id, { value: event.target.value })}
+                                className="h-8 border-white/20 bg-white/5 text-sm text-white"
+                                placeholder="Value"
+                                type={field.secret ? "password" : "text"}
+                              />
+                              {field.key.toLowerCase().includes("pass") && (
+                                <Button
+                                  type="button"
+                                  onClick={() => generatePassword(field.id)}
+                                  variant="outline"
+                                  className="h-8 border-white/20 bg-white/5 px-2 text-xs text-white hover:bg-white/10"
+                                >
+                                  Gen
+                                </Button>
+                              )}
+                            </div>
+                            <div className="flex gap-1">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => updateDraftField(field.id, { secret: !field.secret })}
+                                className="h-8 border-white/20 bg-white/5 px-2 text-xs text-white hover:bg-white/10"
+                              >
+                                {field.secret ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                onClick={() => removeDraftField(field.id)}
+                                className="h-8 px-2 text-red-300 hover:bg-red-500/10"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
                       </div>
+                      <Button type="button" variant="outline" onClick={addField} className="h-8 w-full border-white/20 bg-white/5 text-xs text-white hover:bg-white/10">
+                        Add Field
+                      </Button>
                     </div>
                     <div className="space-y-1">
-                      <Label htmlFor="category" className="text-xs">
-                        Category
-                      </Label>
-                      <Select
-                        value={newCredential.category}
-                        onValueChange={(value: any) => setNewCredential((prev) => ({ ...prev, category: value }))}
-                      >
-                        <SelectTrigger className="bg-white/5 border-white/20 text-white text-sm h-8">
+                      <Label className="text-xs">Category</Label>
+                      <Select value={draft.category} onValueChange={(value) => setDraft((previous) => ({ ...previous, category: value as CredentialCategory }))}>
+                        <SelectTrigger className="h-8 border-white/20 bg-white/5 text-sm text-white">
                           <SelectValue />
                         </SelectTrigger>
-                        <SelectContent className="bg-gray-900/95 border-gray-700">
-                          <SelectItem value="website" className="text-white hover:bg-white/10 text-sm">
-                            Website
-                          </SelectItem>
-                          <SelectItem value="api" className="text-white hover:bg-white/10 text-sm">
-                            API Key
-                          </SelectItem>
-                          <SelectItem value="database" className="text-white hover:bg-white/10 text-sm">
-                            Database
-                          </SelectItem>
-                          <SelectItem value="other" className="text-white hover:bg-white/10 text-sm">
-                            Other
-                          </SelectItem>
+                        <SelectContent className="border-gray-700 bg-gray-900/95 text-white">
+                          <SelectItem value="website">Website</SelectItem>
+                          <SelectItem value="api">API Key</SelectItem>
+                          <SelectItem value="database">Database</SelectItem>
+                          <SelectItem value="other">Other</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Notes</Label>
+                      <Textarea
+                        value={draft.notes}
+                        onChange={(event) => setDraft((previous) => ({ ...previous, notes: event.target.value }))}
+                        className="min-h-[64px] border-white/20 bg-white/5 text-sm text-white"
+                        placeholder="Optional notes"
+                      />
+                    </div>
                     <Button
                       onClick={addCredential}
-                      className="w-full bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-sm h-8"
-                      disabled={!newCredential.title || !newCredential.username || !newCredential.password}
+                      className="h-8 w-full bg-gradient-to-r from-purple-500 to-blue-500 text-sm"
+                      disabled={!draft.title || !draft.fields.some((field) => field.key && field.value)}
                     >
                       Add Credential
                     </Button>
@@ -759,18 +818,13 @@ export default function CredStore() {
           </CardContent>
         </Card>
 
-        {/* Optimized Credentials List */}
-        <div className="space-y-2 max-h-96 overflow-y-auto">
+        <div className="max-h-[calc(100dvh-150px)] space-y-2 overflow-y-auto">
           {filteredCredentials.length === 0 ? (
-            <Card className="bg-white/5 border-white/10 shadow-sm">
+            <Card className="border-white/10 bg-white/5 shadow-sm">
               <CardContent className="p-6 text-center">
-                <Shield className="w-12 h-12 text-gray-400 mx-auto mb-2" />
-                <h3 className="text-lg font-medium text-white mb-1">No credentials found</h3>
-                <p className="text-gray-400 text-sm">
-                  {searchTerm || selectedCategory !== "all"
-                    ? "Try adjusting your search."
-                    : "Add your first credential."}
-                </p>
+                <Shield className="mx-auto mb-2 h-12 w-12 text-gray-400" />
+                <h3 className="mb-1 text-lg font-medium text-white">No credentials found</h3>
+                <p className="text-sm text-gray-400">{searchTerm || selectedCategory !== "all" ? "Try adjusting your search." : "Add your first credential."}</p>
               </CardContent>
             </Card>
           ) : (
@@ -778,15 +832,15 @@ export default function CredStore() {
               <CredentialCard
                 key={credential.id}
                 credential={credential}
-                showPassword={showPassword.has(credential.id)}
-                onTogglePassword={() => togglePasswordVisibility(credential.id)}
-                onCopyToClipboard={copyToClipboard}
+                visibleFields={visibleFields}
+                onToggleField={toggleFieldVisibility}
+                onCopy={copyToClipboard}
                 onDelete={() => deleteCredential(credential.id)}
               />
             ))
           )}
         </div>
       </div>
-    </div>
+    </main>
   )
 }

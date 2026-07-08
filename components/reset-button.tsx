@@ -19,16 +19,27 @@ export function ResetCredStore() {
 
   const handleReset = () => {
     setIsResetting(true)
-    try {
-      // Clear all stored data
-      localStorage.removeItem("credstore_data")
+    const reset = async () => {
+      try {
+        try {
+          const { Preferences } = await import("@capacitor/preferences")
+          await Preferences.remove({ key: "credstore_vault_v2" })
+          await Preferences.remove({ key: "credstore_data" })
+        } catch {
+          // Web and Electron fall back to localStorage.
+        }
 
-      // Reload the page to start fresh
-      window.location.reload()
-    } catch (error) {
-      console.error("Error resetting CredStore:", error)
-      setIsResetting(false)
+        localStorage.removeItem("credstore_vault_v2")
+        localStorage.removeItem("credstore_data")
+
+        window.location.reload()
+      } catch (error) {
+        console.error("Error resetting CredStore:", error)
+        setIsResetting(false)
+      }
     }
+
+    reset()
   }
 
   return (

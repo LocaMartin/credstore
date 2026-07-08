@@ -1,6 +1,19 @@
 import type React from "react"
-import type { Metadata, Viewport } from "next" // Add Viewport type
+import type { Metadata, Viewport } from "next"
 import "./globals.css"
+
+const contentSecurityPolicy = [
+  "default-src 'self'",
+  "base-uri 'self'",
+  "connect-src 'none'",
+  "font-src 'self' data:",
+  "form-action 'none'",
+  "frame-ancestors 'none'",
+  "img-src 'self' data: blob:",
+  "object-src 'none'",
+  "script-src 'self' 'unsafe-inline'",
+  "style-src 'self' 'unsafe-inline'",
+].join("; ")
 
 export const metadata: Metadata = {
   title: "CredStore - Secure Offline Credential Manager",
@@ -11,14 +24,12 @@ export const metadata: Metadata = {
   creator: "CredStore",
   publisher: "CredStore",
   robots: "noindex, nofollow",
-  // Remove viewport from here
 }
 
-// Add this new export
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#6366f1"
+  themeColor: "#6366f1",
 }
 
 export default function RootLayout({
@@ -29,6 +40,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
+        <meta httpEquiv="Content-Security-Policy" content={contentSecurityPolicy} />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
         <meta name="apple-mobile-web-app-title" content="CredStore" />

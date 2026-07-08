@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu } = require("electron")
+const { app, BrowserWindow, Menu, session } = require("electron")
 const path = require("path")
 const fs = require("fs")
 const isDev = process.env.NODE_ENV === "development"
@@ -24,6 +24,7 @@ function createWindow() {
       webSecurity: true,
       allowRunningInsecureContent: false,
       experimentalFeatures: false,
+      sandbox: true,
     },
     icon: getIconPath(),
     titleBarStyle: "default",
@@ -31,6 +32,8 @@ function createWindow() {
     autoHideMenuBar: true, // Hide menu bar by default
     title: "CredStore - Secure Credential Manager",
   })
+
+  mainWindow.setContentProtection(true)
 
   // Create application menu
   const template = [
@@ -128,6 +131,7 @@ function getIconPath() {
 }
 
 app.whenReady().then(() => {
+  installOfflineGuards()
   createWindow()
 
   app.on("activate", () => {
@@ -136,6 +140,33 @@ app.whenReady().then(() => {
     }
   })
 })
+
+function installOfflineGuards() {
+  session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => {
+    callback(false)
+  })
+
+  session.defaultSession.webRequest.onBeforeRequest((details, callback) => {
+    if (isAllowedLocalUrl(details.url)) {
+      callback({})
+      return
+    }
+
+    callback({ cancel: true })
+  })
+}
+
+function isAllowedLocalUrl(url) {
+  if (url.startsWith("file://")) return true
+  if (!isDev) return false
+
+  try {
+    const parsedUrl = new URL(url)
+    return parsedUrl.hostname === "localhost" || parsedUrl.hostname === "127.0.0.1"
+  } catch {
+    return false
+  }
+}
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
@@ -152,7 +183,7 @@ app.on("web-contents-created", (event, contents) => {
   contents.on("will-navigate", (event, navigationUrl) => {
     const parsedUrl = new URL(navigationUrl)
 
-    if (parsedUrl.origin !== "http://localhost:3000" && !navigationUrl.startsWith("file://")) {
+    if (!isAllowedLocalUrl(navigationUrl) || (isDev && parsedUrl.origin !== "http://localhost:3000")) {
       event.preventDefault()
     }
   })
