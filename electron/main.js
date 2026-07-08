@@ -1,5 +1,6 @@
-const { app, BrowserWindow, Menu, shell } = require("electron")
+const { app, BrowserWindow, Menu } = require("electron")
 const path = require("path")
+const fs = require("fs")
 const isDev = process.env.NODE_ENV === "development"
 
 // Enable live reload for Electron in development
@@ -83,17 +84,6 @@ function createWindow() {
       label: "Window",
       submenu: [{ role: "minimize" }, { role: "close" }],
     },
-    {
-      label: "Help",
-      submenu: [
-        {
-          label: "About CredStore",
-          click: () => {
-            shell.openExternal("https://github.com/your-repo/credstore")
-          },
-        },
-      ],
-    },
   ]
 
   const menu = Menu.buildFromTemplate(template)
@@ -118,21 +108,23 @@ function createWindow() {
     app.quit()
   })
 
-  // Handle external links
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url)
+  // Strictly local: block all attempts to open new external windows.
+  mainWindow.webContents.setWindowOpenHandler(() => {
     return { action: "deny" }
   })
 }
 
 function getIconPath() {
+  let iconPath
   if (process.platform === "win32") {
-    return path.join(__dirname, "assets", "icon.ico")
+    iconPath = path.join(__dirname, "assets", "icon.ico")
   } else if (process.platform === "darwin") {
-    return path.join(__dirname, "assets", "icon.icns")
+    iconPath = path.join(__dirname, "assets", "icon.icns")
   } else {
-    return path.join(__dirname, "assets", "icon.png")
+    iconPath = path.join(__dirname, "assets", "icon.png")
   }
+
+  return fs.existsSync(iconPath) ? iconPath : undefined
 }
 
 app.whenReady().then(() => {

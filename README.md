@@ -1,21 +1,9 @@
-<!--
-<div align="center">
-  <svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 24 24" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
-    <defs>
-      <linearGradient id="shieldGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-        <stop offset="0%" style="stop-color:#FF0000; stop-opacity:1" /> <stop offset="100%" style="stop-color:#0000FF; stop-opacity:1" /> </linearGradient>
-    </defs>
-    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10" fill="none" stroke="url(#shieldGradient)" />
-  </svg>
-</div>
--->
-
 <div align="center">
   <img src="./.res/logo.svg" alt="Your Logo Description">
   <br> <img src="./.res/text.svg" alt="Your Text Description">
 </div>
 
-<p align="center"><b>1.0.0</b></p>
+<p align="center"><b>1.0.1</b></p>
 
 ### Is a offline personal cross-platform credential management app made with
 
@@ -34,6 +22,19 @@
 [![Android SDK](https://img.shields.io/badge/Android_SDK-3DDC84?logo=android&logoColor=white)](https://developer.android.com/)
 [![Web Crypto API](https://img.shields.io/badge/Web_Crypto_API-000000?logo=mozilla&logoColor=white)](https://developer.mozilla.org/en-US/docs/Web/API/Web_Crypto_API)
 
+## Install
+### from npm registry
+```
+npm i credstore
+```
+### from github
+```
+npm install github.com:LocaMartin/credstore
+```
+### For android [click](https://play.google.com/store/apps/details?id=com.credstore.app) to download from playstore
+```
+https://play.google.com/store/apps/details?id=com.credstore.app
+```
 ### To store passwords, API keys, and sensitive data in an organized manner .
 
 <img src="./.res/login.png" />
@@ -41,11 +42,11 @@
 
 ### You can download precompiled binaries from [here](https://github.com/LocaMartin/credstore/releases)
 
-## ✨ Features
+## Features
 
 ### Security First
 - **AES-256-GCM Encryption**: for all stored data
-- **PBKDF2 Key Derivation**: 50,000 iterations with SHA-256 for password strengthening
+- **PBKDF2 Key Derivation**: 100,000 iterations with SHA-256 for password strengthening
 - **Zero Network Communication**: Completely offline operation
 - **Memory-Only Master Key**: Master password never written to disk
 - **Auto-Lock Protection**: Automatically locks when tab becomes inactive
@@ -60,12 +61,12 @@
 - **Export Functionality**: Secure backup export in JSON format
 
 ## Security Architecture
-- ✅ Master password never stored on disk
-- ✅ All data encrypted with AES-256-GCM
-- ✅ Unique salt per encryption operation
-- ✅ No network communication
-- ✅ Memory cleared on app close/lock
-- ✅ Auto-lock on inactivity
+- Master password never stored on disk
+- All data encrypted with AES-256-GCM
+- Unique salt per encryption operation
+- No network communication
+- Memory cleared on app close/lock
+- Auto-lock on inactivity
 
 ## Software and System Requirements
 
@@ -92,72 +93,10 @@
 
 </div>
 
-## Manual compilation
-
-#### Clone the repository
-```bash
-git clone https://github.com/LocaMartin/credstore.git
-```
-#### Web Version
-```bash
-# Build and run the web version
-
-# Install dependencies
-npm install
-
-# Production Build
-npm run build
-
-# Production Start
-npm run start
-```
-#### Build for current platform
-```bash
-npm run dist
-```
-#### Desktop Version (Electron)
-```bash
-# Run in development mode
-npm run electron-dev
-
-# Build for your current platform
-npm run dist
-
-# Build for specific platforms
-npm run dist-linux
-npm run dist-windows
-npm run dist-mac
-# Build for all platforms
-npm run dist-all
-```
-#### Android Version
-```bash
-# Initialize Android project
-npm run android:init
-
-# Sync changes to Android project
-npm run android:sync
-
-# Open in Android Studio
-npm run android:open
-
-# Build APK With "npm"
-npm run android:build
-
-# Build APK
-cd android
-./gradlew assembleDebug
-
-# The APK will be available at:
-# ~/credstore/android/app/build/outputs/apk/debug/app-debug.apk
-
-# Run on device/emulator
-npm run android:run
-```
 ### Encryption Process
 1. **Master Password Input**: User enters master password
 2. **Salt Generation**: Cryptographically secure random salt created
-3. **Key Derivation**: PBKDF2 with 50,000 iterations generates encryption key
+3. **Key Derivation**: PBKDF2 with 100,000 iterations generates encryption key
 4. **Data Encryption**: AES-256-GCM encrypts credential data
 5. **Secure Storage**: Encrypted data stored locally with salt and IV
    

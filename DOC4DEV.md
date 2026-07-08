@@ -1,35 +1,4 @@
-## Technology Stack
-
-#### Frontend Framework
-- **[Next.js 14](https://nextjs.org/)** - React framework with App Router
-- **[React 18](https://reactjs.org/)** - Modern React with concurrent features
-- **[TypeScript](https://www.typescriptlang.org/)** - Type-safe JavaScript
-
-#### UI & Styling
-- **[Tailwind CSS](https://tailwindcss.com/)** - Utility-first CSS framework
-- **[Radix UI](https://www.radix-ui.com/)** - Accessible component primitives
-- **[Lucide React](https://lucide.dev/)** - Beautiful SVG icons
-- **[Class Variance Authority](https://cva.style/)** - Component variant management
-
-#### Desktop Applications
-- **[Electron](https://www.electronjs.org/)** - Cross-platform desktop apps
-- **[Electron Builder](https://www.electron.build/)** - Application packaging and distribution
-
-#### Mobile Applications
-- **[Capacitor](https://capacitorjs.com/)** - Native mobile app development
-- **[Android SDK](https://developer.android.com/studio)** - Android application building
-
-#### Security & Encryption
-- **[Web Crypto API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Crypto_API)** - Browser-native cryptographic operations
-- **AES-256-GCM** - Authenticated encryption algorithm
-- **PBKDF2** - Password-based key derivation function
-
-## Data Storage Locations
-- **Web Browser**: `localStorage` (cleared on cache clear)
-- **Windows**: `%APPDATA%/credstore/Local Storage/`
-- **macOS**: `~/Library/Application Support/credstore/Local Storage/`
-- **Linux**: `~/.config/credstore/Local Storage/`
-- **Android**: `/data/data/com.credstore.app/` (app-private storage)
+<h1 align="center"><b>Manual compilation</b></h1>
 
 #### Clone the repository
 ```bash
@@ -38,8 +7,14 @@ git clone https://github.com/LocaMartin/credstore.git
 #### Web Version
 ```bash
 # Build and run the web version
-cd ~/credstore
+
+# Install dependencies
+npm install
+
+# Production Build
 npm run build
+
+# Production Start
 npm run start
 ```
 #### Build for current platform
@@ -85,6 +60,41 @@ cd android
 # Run on device/emulator
 npm run android:run
 ```
+---
+
+<h1 align="center"><b>Technology Stack</b></h1>
+
+#### Frontend Framework
+- **[Next.js 14](https://nextjs.org/)** - React framework with App Router
+- **[React 18](https://reactjs.org/)** - Modern React with concurrent features
+- **[TypeScript](https://www.typescriptlang.org/)** - Type-safe JavaScript
+
+#### UI & Styling
+- **[Tailwind CSS](https://tailwindcss.com/)** - Utility-first CSS framework
+- **[Radix UI](https://www.radix-ui.com/)** - Accessible component primitives
+- **[Lucide React](https://lucide.dev/)** - Beautiful SVG icons
+- **[Class Variance Authority](https://cva.style/)** - Component variant management
+
+#### Desktop Applications
+- **[Electron](https://www.electronjs.org/)** - Cross-platform desktop apps
+- **[Electron Builder](https://www.electron.build/)** - Application packaging and distribution
+
+#### Mobile Applications
+- **[Capacitor](https://capacitorjs.com/)** - Native mobile app development
+- **[Android SDK](https://developer.android.com/studio)** - Android application building
+
+#### Security & Encryption
+- **[Web Crypto API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Crypto_API)** - Browser-native cryptographic operations
+- **AES-256-GCM** - Authenticated encryption algorithm
+- **PBKDF2** - Password-based key derivation function
+
+## Data Storage Locations
+- **Web Browser**: `localStorage` (cleared on cache clear)
+- **Windows**: `%APPDATA%/credstore/Local Storage/`
+- **macOS**: `~/Library/Application Support/credstore/Local Storage/`
+- **Linux**: `~/.config/credstore/Local Storage/`
+- **Android**: `/data/data/com.credstore.app/` (app-private storage)
+
 **Start development server**
 ```bash
 npm run dev
@@ -138,7 +148,7 @@ const deriveKey = async (password: string, salt: string): Promise<CryptoKey> => 
     {
       name: "PBKDF2",
       salt: encoder.encode(salt),
-      iterations: 10000,        // Computational cost factor
+      iterations: 100000,       // Computational cost factor
       hash: "SHA-256",          // Hash function
     },
     keyMaterial,
@@ -149,7 +159,7 @@ const deriveKey = async (password: string, salt: string): Promise<CryptoKey> => 
 }
 ```
 **Security Analysis:**
-- **PBKDF2**: Stretches the password through 10,000 iterations, making brute force attacks computationally expensive
+- **PBKDF2**: Stretches the password through 100,000 iterations, making brute force attacks computationally expensive
 - **Salt**: Prevents rainbow table attacks by ensuring unique keys even for identical passwords
 - **SHA-256**: Cryptographically secure hash function
 - **Non-extractable keys**: Browser prevents key material from being read by JavaScript
@@ -331,9 +341,9 @@ Show lock screen → Trigger garbage collection
 ### Security Threat Model & Mitigations
 
 #### Threat: Password Brute Force
-**Mitigation**: PBKDF2 with 10,000 iterations makes each password attempt computationally expensive
+**Mitigation**: PBKDF2 with 100,000 iterations makes each password attempt computationally expensive
 ```
-Time to crack = (possible_passwords × 10,000 × hash_time) / attack_speed
+Time to crack = (possible_passwords × 100,000 × hash_time) / attack_speed
 ```
 #### Threat: Memory Dumps
 **Mitigation**: 
@@ -371,7 +381,7 @@ Time to crack = (possible_passwords × 10,000 × hash_time) / attack_speed
 #### Key Derivation: PBKDF2
 - **Hash Function**: SHA-256
 - **Salt Size**: 64 bits (8 bytes)
-- **Iterations**: 10,000 (configurable)
+- **Iterations**: 100,000 (configurable)
 - **Output**: 256-bit AES key
 
 #### Random Number Generation

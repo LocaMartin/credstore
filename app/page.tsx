@@ -73,6 +73,8 @@ interface UnlockScreenProps {
   hasError: boolean
 }
 
+const APP_VERSION = "1.0.1"
+
 // Optimized encryption with reduced memory footprint
 const generateSalt = (): string => {
   const array = new Uint8Array(8) // Reduced from 16 to 8 bytes
@@ -90,7 +92,7 @@ const deriveKey = async (password: string, salt: string): Promise<CryptoKey> => 
     {
       name: "PBKDF2",
       salt: encoder.encode(salt),
-      iterations: 10000, // Reduced from 50000 for better performance
+      iterations: 100000,
       hash: "SHA-256",
     },
     keyMaterial,
@@ -208,14 +210,7 @@ const CredentialCard = memo<CredentialCardProps>(
                 {credential.url && (
                   <div className="flex items-center space-x-2">
                     <span className="text-gray-400 w-16 flex-shrink-0">URL:</span>
-                    <a
-                      href={credential.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-blue-400 hover:text-blue-300 underline truncate flex-1 text-xs"
-                    >
-                      {credential.url}
-                    </a>
+                    <span className="text-blue-300 truncate flex-1 text-xs">{credential.url}</span>
                   </div>
                 )}
               </div>
@@ -274,7 +269,7 @@ const UnlockScreen = memo<UnlockScreenProps>(({ masterPassword, setMasterPasswor
             <Shield className="w-6 h-6 text-white" />
           </div>
           <CardTitle className="text-xl font-bold text-white">CredStore</CardTitle>
-          <CardDescription className="text-gray-300 text-sm">Secure Credential Manager</CardDescription>
+          <CardDescription className="text-gray-300 text-sm">Secure Credential Manager - v{APP_VERSION}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="space-y-2">
@@ -600,7 +595,9 @@ export default function CredStore() {
             </div>
             <div>
               <h1 className="text-lg font-bold text-white">CredStore</h1>
-              <p className="text-gray-300 text-xs">{credentials.length} credentials</p>
+              <p className="text-gray-300 text-xs">
+                {credentials.length} credentials - v{APP_VERSION}
+              </p>
             </div>
           </div>
           <div className="flex items-center space-x-1">

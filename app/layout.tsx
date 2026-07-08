@@ -1,16 +1,13 @@
 import type React from "react"
 import type { Metadata, Viewport } from "next" // Add Viewport type
-import { Inter } from 'next/font/google'
 import "./globals.css"
-
-const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
   title: "CredStore - Secure Offline Credential Manager",
   description:
     "A secure, offline credential management system with AES-256 encryption. Store passwords, API keys, and credentials safely with glassmorphism design.",
   keywords: ["password manager", "credential manager", "security", "encryption", "offline", "vault"],
-  authors: [{ name: "CredStore Team", url: "https://github.com/LocaMartin/credstore" }],
+  authors: [{ name: "CredStore Team" }],
   creator: "CredStore",
   publisher: "CredStore",
   robots: "noindex, nofollow",
@@ -39,7 +36,7 @@ export default function RootLayout({
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
         <link rel="manifest" href="/manifest.json" />
       </head>
-      <body className={inter.className} suppressHydrationWarning>
+      <body suppressHydrationWarning>
         {children}
       </body>
     </html>

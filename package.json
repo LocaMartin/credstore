@@ -1,7 +1,7 @@
 {
   "name": "credstore",
-  "version": "1.0.0",
-  "private": true,
+  "version": "1.0.1",
+  "private": false,
   "description": "Secure Offline Credential Manager",
   "author": {
     "name": "Loca Martin",
@@ -27,6 +27,10 @@
     "dist-windows": "npm run export && electron-builder --win --publish=never",
     "dist-mac": "npm run export && electron-builder --mac --publish=never",
     "dist-all": "npm run export && electron-builder --linux --win --mac --publish=never",
+    "release": "npm run release:linux && npm run release:windows && npm run release:mac",
+    "release:linux": "npm run export && electron-builder --linux --x64 --arm64 --publish=never",
+    "release:windows": "npm run export && electron-builder --win --x64 --ia32 --publish=never",
+    "release:mac": "npm run export && electron-builder --mac --x64 --arm64 --publish=never",
     "android:init": "npm run build && npx cap add android",
     "android:sync": "npm run build && npx cap sync android",
     "android:build": "npm run build && npx cap sync android && npx cap build android",
@@ -41,36 +45,15 @@
     },
     "files": [
       "out/**/*",
-      "electron/**/*",
-      "!electron/assets/*.png"
-    ],
-    "extraResources": [
-      {
-        "from": "electron/assets/",
-        "to": "assets/",
-        "filter": [
-          "**/*"
-        ]
-      }
+      "electron/**/*"
     ],
     "linux": {
       "target": [
         {
-          "target": "deb",
-          "arch": [
-            "x64"
-          ]
-        },
-        {
           "target": "AppImage",
           "arch": [
-            "x64"
-          ]
-        },
-        {
-          "target": "rpm",
-          "arch": [
-            "x64"
+            "x64",
+            "arm64"
           ]
         }
       ],
@@ -106,7 +89,6 @@
           ]
         }
       ],
-      "icon": "electron/assets/icon.ico",
       "publisherName": "CredStore",
       "verifyUpdateCodeSignature": false
     },
@@ -136,7 +118,6 @@
           ]
         }
       ],
-      "icon": "electron/assets/icon.icns",
       "category": "public.app-category.utilities"
     }
   },
