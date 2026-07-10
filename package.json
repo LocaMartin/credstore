@@ -86,12 +86,7 @@
         }
       ],
       "category": "Utility",
-      "description": "Secure Offline Credential Manager",
-      "desktop": {
-        "Name": "CredStore",
-        "Comment": "Secure Offline Credential Manager",
-        "Keywords": "password;credential;security;vault;"
-      }
+      "description": "Secure Offline Credential Manager"
     },
     "win": {
       "target": [
@@ -103,7 +98,6 @@
           ]
         }
       ],
-      "publisherName": "CredStore",
       "verifyUpdateCodeSignature": false
     },
     "nsis": {
