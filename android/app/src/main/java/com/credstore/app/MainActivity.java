@@ -28,6 +28,7 @@ public class MainActivity extends BridgeActivity {
                 | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
         );
 
+        registerPlugin(CredStoreBiometricPlugin.class);
         super.onCreate(savedInstanceState);
     }
 

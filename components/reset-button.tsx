@@ -25,12 +25,14 @@ export function ResetCredStore() {
           const { Preferences } = await import("@capacitor/preferences")
           await Preferences.remove({ key: "credstore_vault_v2" })
           await Preferences.remove({ key: "credstore_data" })
+          await Preferences.remove({ key: "credstore_lockout_until" })
         } catch {
           // Web and Electron fall back to localStorage.
         }
 
         localStorage.removeItem("credstore_vault_v2")
         localStorage.removeItem("credstore_data")
+        localStorage.removeItem("credstore_lockout_until")
 
         window.location.reload()
       } catch (error) {

@@ -1,9 +1,9 @@
 "use client"
 
-/* eslint-disable @next/next/no-img-element */
-
 import type React from "react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { QRCodeCanvas } from "qrcode.react"
+import { registerPlugin } from "@capacitor/core"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -21,6 +21,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea"
 import {
   base64ToBytes,
+  bytesToBase64,
   createDraft,
   createId,
   createPasswordSlotForKey,
@@ -30,10 +31,12 @@ import {
   generateVaultKey,
   importVaultKey,
   LEGACY_STORAGE_KEY,
+  masterKeyMeetsPolicy,
   migrateLegacyCredential,
   parseVault,
   readStoredValue,
   removeStoredValue,
+  sanitizeText,
   THEME_STORAGE_KEY,
   VAULT_STORAGE_KEY,
   writeStoredValue,
@@ -66,8 +69,20 @@ import {
 } from "lucide-react"
 import { ResetCredStore } from "@/components/reset-button"
 
-const APP_VERSION = "1.0.6"
+const APP_VERSION = "1.0.7"
 const MAX_UNLOCK_DELAY_MS = 30000
+const MAX_FAILED_UNLOCKS = 10
+const LOCKOUT_STORAGE_KEY = "credstore_lockout_until"
+const CREDSTORE_DEEPLINK_SCHEME = "credstore"
+const RUNTIME_LOGO_PATH = "./logo.svg"
+
+type CredStoreBiometricPlugin = {
+  isAvailable: () => Promise<{ available: boolean }>
+  createSecret: (options: { slotId: string; secret: string }) => Promise<{ encrypted: string; iv: string }>
+  getSecret: (options: { slotId: string; encrypted: string; iv: string }) => Promise<{ secret: string }>
+}
+
+const CredStoreBiometric = registerPlugin<CredStoreBiometricPlugin>("CredStoreBiometric")
 
 const THEMES: Record<ThemeName, string> = {
   indigo: "from-purple-900 via-blue-900 to-indigo-900",
@@ -90,7 +105,7 @@ function categoryIcon(category: CredentialCategory) {
 }
 
 function LogoMark({ className }: { className: string }) {
-  return <img src="./.res/logo.svg" alt="CredStore" className={className} draggable={false} />
+  return <img src={RUNTIME_LOGO_PATH} alt="CredStore" className={className} draggable={false} />
 }
 
 function CredentialCard({
@@ -187,10 +202,17 @@ export default function CredStore() {
   const [newMasterKey, setNewMasterKey] = useState("")
   const [newMasterKeyLabel, setNewMasterKeyLabel] = useState("Backup password")
   const [syncCode, setSyncCode] = useState("")
+  const [syncMode, setSyncMode] = useState<"client" | "receiver">("client")
+  const [syncPayload, setSyncPayload] = useState("")
+  const [syncImportText, setSyncImportText] = useState("")
+  const [syncMessage, setSyncMessage] = useState("")
   const [unlockDelayUntil, setUnlockDelayUntil] = useState(0)
   const [failedUnlocks, setFailedUnlocks] = useState(0)
   const [biometricMessage, setBiometricMessage] = useState("")
+  const [hasVault, setHasVault] = useState(false)
+  const [biometricAvailable, setBiometricAvailable] = useState(false)
   const lastActivityRef = useRef(Date.now())
+  const scanVideoRef = useRef<HTMLVideoElement | null>(null)
 
   const themeClass = THEMES[theme]
   const unlockDelayRemaining = Math.max(0, unlockDelayUntil - Date.now())
@@ -233,6 +255,20 @@ export default function CredStore() {
     const boot = async () => {
       const storedTheme = await readStoredValue(THEME_STORAGE_KEY)
       if (storedTheme && storedTheme in THEMES) setTheme(storedTheme as ThemeName)
+      setHasVault(Boolean(await readStoredValue(VAULT_STORAGE_KEY)))
+
+      const storedLockout = Number(await readStoredValue(LOCKOUT_STORAGE_KEY))
+      if (Number.isFinite(storedLockout) && storedLockout > Date.now()) {
+        setUnlockDelayUntil(storedLockout)
+      }
+
+      try {
+        const result = await CredStoreBiometric.isAvailable()
+        setBiometricAvailable(result.available)
+      } catch {
+        setBiometricAvailable(false)
+      }
+
       setIsLocked(true)
     }
 
@@ -298,6 +334,7 @@ export default function CredStore() {
             setMasterPassword("")
             setFailedUnlocks(0)
             setUnlockDelayUntil(0)
+            await removeStoredValue(LOCKOUT_STORAGE_KEY)
             lastActivityRef.current = Date.now()
             return
           } catch {
@@ -306,6 +343,14 @@ export default function CredStore() {
         }
 
         throw new Error("Invalid master key")
+      }
+
+      if (!masterKeyMeetsPolicy(masterPassword)) {
+        setBiometricMessage(
+          "New master key must be at least 8 characters and include lowercase, uppercase, number, and symbol.",
+        )
+        setHasError(true)
+        return
       }
 
       const legacyData = await readStoredValue(LEGACY_STORAGE_KEY)
@@ -327,6 +372,7 @@ export default function CredStore() {
 
       await writeStoredValue(VAULT_STORAGE_KEY, JSON.stringify(nextRecord))
       if (legacyData) await removeStoredValue(LEGACY_STORAGE_KEY)
+      setHasVault(true)
       setVaultRecord(nextRecord)
       setVaultKey(nextVaultKey)
       setCredentials(migratedCredentials)
@@ -334,22 +380,72 @@ export default function CredStore() {
       setMasterPassword("")
       setFailedUnlocks(0)
       setUnlockDelayUntil(0)
+      await removeStoredValue(LOCKOUT_STORAGE_KEY)
       lastActivityRef.current = Date.now()
     } catch {
       const nextFailures = failedUnlocks + 1
-      const delayMs = Math.min(MAX_UNLOCK_DELAY_MS, 500 * 2 ** Math.max(0, nextFailures - 1))
+      const delayMs =
+        nextFailures >= MAX_FAILED_UNLOCKS
+          ? MAX_UNLOCK_DELAY_MS
+          : Math.min(MAX_UNLOCK_DELAY_MS, 500 * 2 ** Math.max(0, nextFailures - 1))
+      const nextUnlockTime = Date.now() + delayMs
 
       setHasError(true)
       setMasterPassword("")
       setFailedUnlocks(nextFailures)
-      setUnlockDelayUntil(Date.now() + delayMs)
+      setUnlockDelayUntil(nextUnlockTime)
+      if (nextFailures >= MAX_FAILED_UNLOCKS) {
+        await writeStoredValue(LOCKOUT_STORAGE_KEY, String(nextUnlockTime))
+      }
     }
   }, [failedUnlocks, masterPassword, unlockDelayUntil])
 
-  const handleBiometricUnlock = useCallback((type: "fingerprint" | "face") => {
-    const label = type === "fingerprint" ? "Fingerprint" : "Face recognition"
-    setBiometricMessage(`${label} unlock needs native biometric keychain support in the Android or desktop build.`)
+  const unlockWithVaultKey = useCallback(async (storedVault: VaultRecord, nextVaultKey: Uint8Array) => {
+    const vaultCryptoKey = await importVaultKey(nextVaultKey)
+    const decryptedVault = JSON.parse(await decryptWithKey(storedVault.payload, vaultCryptoKey)) as VaultData
+
+    setVaultRecord(storedVault)
+    setVaultKey(nextVaultKey)
+    setCredentials(decryptedVault.credentials || [])
+    setIsLocked(false)
+    setMasterPassword("")
+    setFailedUnlocks(0)
+    setUnlockDelayUntil(0)
+    await removeStoredValue(LOCKOUT_STORAGE_KEY)
+    lastActivityRef.current = Date.now()
   }, [])
+
+  const handleBiometricUnlock = useCallback(
+    async (type: "fingerprint" | "face") => {
+      if (!biometricAvailable) {
+        setBiometricMessage("Biometric unlock is not available on this device.")
+        return
+      }
+
+      try {
+        const storedVault = parseVault(await readStoredValue(VAULT_STORAGE_KEY))
+        const slot = storedVault?.keySlots.find(
+          (item) => item.enabled && item.type === type && item.biometricKey,
+        )
+
+        if (!storedVault || !slot?.biometricKey) {
+          setBiometricMessage(`No ${type === "fingerprint" ? "fingerprint" : "face"} master key is saved yet.`)
+          return
+        }
+
+        const result = await CredStoreBiometric.getSecret({
+          slotId: slot.id,
+          encrypted: slot.biometricKey.encrypted,
+          iv: slot.biometricKey.iv,
+        })
+
+        await unlockWithVaultKey(storedVault, base64ToBytes(result.secret))
+      } catch {
+        setBiometricMessage("Biometric unlock failed.")
+      }
+    },
+    [biometricAvailable, unlockWithVaultKey],
+  )
 
   const addField = useCallback(() => {
     setDraft((previous) => ({
@@ -378,18 +474,23 @@ export default function CredStore() {
 
   const addCredential = useCallback(async () => {
     const fields = draft.fields
-      .map((field) => ({ ...field, key: field.key.trim(), value: field.value.trim() }))
+      .map((field) => ({
+        ...field,
+        key: sanitizeText(field.key, 80).trim(),
+        value: sanitizeText(field.value, 2000).trim(),
+      }))
       .filter((field) => field.key && field.value)
 
-    if (!draft.title.trim() || fields.length === 0) return
+    const title = sanitizeText(draft.title, 120).trim()
+    if (!title || fields.length === 0) return
 
     const now = new Date().toISOString()
     const credential: Credential = {
       id: createId(),
-      title: draft.title.trim(),
+      title,
       category: draft.category,
       fields,
-      notes: draft.notes.trim(),
+      notes: sanitizeText(draft.notes, 5000).trim(),
       createdAt: now,
       updatedAt: now,
     }
@@ -424,6 +525,12 @@ export default function CredStore() {
 
   const addPasswordMasterKey = useCallback(async () => {
     if (!vaultRecord || !vaultKey || !newMasterKey.trim()) return
+    if (!masterKeyMeetsPolicy(newMasterKey)) {
+      setBiometricMessage(
+        "New password master key must be at least 8 characters and include lowercase, uppercase, number, and symbol.",
+      )
+      return
+    }
 
     const slot = await createPasswordSlotForKey(vaultKey, newMasterKey, newMasterKeyLabel.trim() || "Backup password")
     const nextRecord: VaultRecord = { ...vaultRecord, keySlots: [...vaultRecord.keySlots, slot] }
@@ -438,14 +545,38 @@ export default function CredStore() {
       if (!vaultRecord || !vaultKey) return
 
       const label = type === "fingerprint" ? "Fingerprint master key" : "Face master key"
+      const slotId = createId()
+
+      if (!biometricAvailable) {
+        setBiometricMessage("Biometric unlock is not available on this device.")
+        return
+      }
+
+      const protectedSecret = await CredStoreBiometric.createSecret({
+        slotId,
+        secret: bytesToBase64(vaultKey),
+      })
       const nextRecord: VaultRecord = {
         ...vaultRecord,
-        keySlots: [...vaultRecord.keySlots, { id: createId(), type, label, enabled: false }],
+        keySlots: [
+          ...vaultRecord.keySlots,
+          {
+            id: slotId,
+            type,
+            label,
+            enabled: true,
+            biometricKey: {
+              platform: "android-keystore",
+              encrypted: protectedSecret.encrypted,
+              iv: protectedSecret.iv,
+            },
+          },
+        ],
       }
       setVaultRecord(nextRecord)
       await persistVault(credentials, nextRecord, vaultKey)
     },
-    [credentials, persistVault, vaultKey, vaultRecord],
+    [biometricAvailable, credentials, persistVault, vaultKey, vaultRecord],
   )
 
   const removeMasterKey = useCallback(
@@ -472,9 +603,96 @@ export default function CredStore() {
   }, [])
 
   const createSyncCode = useCallback(() => {
-    const code = Array.from(crypto.getRandomValues(new Uint8Array(6)), (value) => (value % 10).toString()).join("")
-    setSyncCode(code)
-  }, [])
+    if (!vaultRecord) return
+
+    const nonce = Array.from(crypto.getRandomValues(new Uint8Array(16)), (value) =>
+      value.toString(16).padStart(2, "0"),
+    ).join("")
+    const payload = btoa(
+      JSON.stringify({
+        scheme: CREDSTORE_DEEPLINK_SCHEME,
+        type: "credstore-offline-sync",
+        version: 1,
+        nonce,
+        createdAt: new Date().toISOString(),
+        vault: vaultRecord,
+      }),
+    )
+
+    setSyncCode(nonce.slice(0, 8).toUpperCase())
+    setSyncPayload(payload)
+    setSyncMessage("One-time QR generated. The receiver can scan or paste this payload.")
+  }, [vaultRecord])
+
+  const importSyncPayload = useCallback(
+    async (payload = syncImportText) => {
+      try {
+        const parsed = JSON.parse(atob(payload.trim())) as {
+          scheme?: string
+          type?: string
+          vault?: VaultRecord
+        }
+
+        if (
+          parsed.scheme !== CREDSTORE_DEEPLINK_SCHEME ||
+          parsed.type !== "credstore-offline-sync" ||
+          !parseVault(JSON.stringify(parsed.vault))
+        ) {
+          throw new Error("Invalid sync payload")
+        }
+
+        await writeStoredValue(VAULT_STORAGE_KEY, JSON.stringify(parsed.vault))
+        setSyncMessage("Vault imported. Locking now; unlock with one of the synced master keys.")
+        lockVault()
+      } catch {
+        setSyncMessage("Invalid or unreadable sync QR payload.")
+      }
+    },
+    [lockVault, syncImportText],
+  )
+
+  const scanSyncQr = useCallback(async () => {
+    setSyncMessage("")
+
+    const BarcodeDetectorCtor = (window as unknown as {
+      BarcodeDetector?: new (options: { formats: string[] }) => {
+        detect: (source: HTMLVideoElement) => Promise<Array<{ rawValue?: string }>>
+      }
+    }).BarcodeDetector
+
+    if (!BarcodeDetectorCtor || !navigator.mediaDevices?.getUserMedia) {
+      setSyncMessage("Camera QR scanning is not available here. Paste the QR payload instead.")
+      return
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+      const video = scanVideoRef.current
+      if (!video) return
+
+      video.srcObject = stream
+      await video.play()
+
+      const detector = new BarcodeDetectorCtor({ formats: ["qr_code"] })
+      const deadline = Date.now() + 30000
+
+      while (Date.now() < deadline) {
+        const results = await detector.detect(video)
+        const rawValue = results[0]?.rawValue
+        if (rawValue) {
+          stream.getTracks().forEach((track) => track.stop())
+          await importSyncPayload(rawValue)
+          return
+        }
+        await new Promise((resolve) => window.setTimeout(resolve, 350))
+      }
+
+      stream.getTracks().forEach((track) => track.stop())
+      setSyncMessage("No QR code detected. Try again or paste the QR payload.")
+    } catch {
+      setSyncMessage("Camera access failed. Paste the QR payload instead.")
+    }
+  }, [importSyncPayload])
 
   const toggleFieldVisibility = useCallback((fieldId: string) => {
     setVisibleFields((previous) => {
@@ -564,7 +782,6 @@ export default function CredStore() {
               </Button>
             </div>
             <p className="text-center text-xs text-gray-400">Biometric unlock needs native keychain support.</p>
-            <ResetCredStore />
           </CardContent>
         </Card>
       </main>
@@ -596,18 +813,84 @@ export default function CredStore() {
                 <DialogHeader>
                   <DialogTitle className="text-sm">Local Device Sync</DialogTitle>
                   <DialogDescription className="text-xs text-gray-400">
-                    Device-to-device sync will use a one-time pairing code before Bluetooth or Wi-Fi transfer.
+                    Sync encrypted vault data locally with a one-time QR payload. No internet connection is used.
                   </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-3">
-                  <div className="rounded-md border border-white/10 bg-white/5 p-4 text-center">
-                    <QrCode className="mx-auto mb-2 h-10 w-10 text-gray-300" />
-                    <p className="font-mono text-2xl tracking-[0.35em] text-white">{syncCode || "------"}</p>
-                    <p className="mt-2 text-xs text-gray-400">Native QR scan and local transport plugins are required for transfer.</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button
+                      type="button"
+                      variant={syncMode === "client" ? "default" : "outline"}
+                      onClick={() => setSyncMode("client")}
+                      className="text-xs"
+                    >
+                      Client
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={syncMode === "receiver" ? "default" : "outline"}
+                      onClick={() => setSyncMode("receiver")}
+                      className="text-xs"
+                    >
+                      Receiver
+                    </Button>
                   </div>
-                  <Button onClick={createSyncCode} className="w-full bg-gradient-to-r from-purple-500 to-blue-500 text-sm">
-                    Generate One-Time Code
-                  </Button>
+                  {syncMode === "client" ? (
+                    <div className="space-y-3">
+                      <div className="rounded-md border border-white/10 bg-white p-4 text-center text-black">
+                        {syncPayload ? (
+                          <QRCodeCanvas
+                            value={syncPayload}
+                            size={220}
+                            level="H"
+                            includeMargin
+                            imageSettings={{
+                              src: RUNTIME_LOGO_PATH,
+                              height: 42,
+                              width: 42,
+                              excavate: true,
+                            }}
+                          />
+                        ) : (
+                          <QrCode className="mx-auto h-24 w-24 text-gray-500" />
+                        )}
+                        <p className="mt-2 font-mono text-xs tracking-[0.25em]">{syncCode || "--------"}</p>
+                      </div>
+                      <Button
+                        onClick={createSyncCode}
+                        className="w-full bg-gradient-to-r from-purple-500 to-blue-500 text-sm"
+                      >
+                        Generate One-Time QR
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <video
+                        ref={scanVideoRef}
+                        className="aspect-video w-full rounded-md border border-white/10 bg-black object-cover"
+                        muted
+                        playsInline
+                      />
+                      <Button onClick={scanSyncQr} className="w-full bg-gradient-to-r from-purple-500 to-blue-500 text-sm">
+                        Open Camera and Scan
+                      </Button>
+                      <Textarea
+                        value={syncImportText}
+                        onChange={(event) => setSyncImportText(event.target.value)}
+                        className="min-h-[72px] border-white/20 bg-white/5 text-xs text-white"
+                        placeholder="Or paste QR payload here"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => importSyncPayload()}
+                        className="w-full border-white/20 bg-white/5 text-xs text-white hover:bg-white/10"
+                      >
+                        Import Pasted Payload
+                      </Button>
+                    </div>
+                  )}
+                  {syncMessage && <p className="text-xs text-gray-300">{syncMessage}</p>}
                 </div>
               </DialogContent>
             </Dialog>
@@ -702,6 +985,10 @@ export default function CredStore() {
                         Face
                       </Button>
                     </div>
+                  </div>
+                  <div className="space-y-2 border-t border-white/10 pt-4">
+                    <Label className="text-xs">Danger Zone</Label>
+                    <ResetCredStore />
                   </div>
                 </div>
               </DialogContent>

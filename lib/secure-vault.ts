@@ -37,7 +37,14 @@ export interface KeySlot {
   type: MasterKeyType
   label: string
   wrappedKey?: EncryptedPayload
+  biometricKey?: BiometricKey
   enabled: boolean
+}
+
+export interface BiometricKey {
+  platform: "android-keystore"
+  encrypted: string
+  iv: string
 }
 
 export interface VaultRecord {
@@ -191,7 +198,7 @@ export const removeStoredValue = async (key: string) => {
 }
 
 export const importVaultKey = (vaultKey: Uint8Array) =>
-  crypto.subtle.importKey("raw", vaultKey, { name: "AES-GCM" }, false, ["encrypt", "decrypt"])
+  crypto.subtle.importKey("raw", new Uint8Array(vaultKey).buffer, { name: "AES-GCM" }, false, ["encrypt", "decrypt"])
 
 export const encryptWithKey = async (data: string, key: CryptoKey): Promise<EncryptedPayload> => {
   const iv = crypto.getRandomValues(new Uint8Array(12))
@@ -252,6 +259,19 @@ export const createPasswordSlotForKey = async (
   enabled: true,
   wrappedKey: await encryptWithPassword(bytesToBase64(vaultKey), password),
 })
+
+export const masterKeyMeetsPolicy = (password: string) =>
+  password.length >= 8 &&
+  /[a-z]/.test(password) &&
+  /[A-Z]/.test(password) &&
+  /\d/.test(password) &&
+  /[^A-Za-z0-9]/.test(password)
+
+export const sanitizeText = (value: string, maxLength = 1000) =>
+  value
+    .normalize("NFKC")
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "")
+    .slice(0, maxLength)
 
 async function deriveKey(password: string, salt: string) {
   const keyMaterial = await crypto.subtle.importKey(

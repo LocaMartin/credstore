@@ -10,6 +10,7 @@ const contentSecurityPolicy = [
   "form-action 'none'",
   "frame-ancestors 'none'",
   "img-src 'self' data: blob:",
+  "media-src 'self' blob:",
   "object-src 'none'",
   "script-src 'self' 'unsafe-inline'",
   "style-src 'self' 'unsafe-inline'",

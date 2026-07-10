@@ -3,5 +3,5 @@
     <string name="app_name">CredStore</string>
     <string name="title_activity_main">CredStore</string>
     <string name="package_name">com.credstore.app</string>
-    <string name="custom_url_scheme">com.credstore.app</string>
+    <string name="custom_url_scheme">credstore</string>
 </resources>

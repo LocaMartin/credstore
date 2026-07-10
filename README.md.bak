@@ -24,18 +24,12 @@
 
 ## Install
 ### from npm registry
-```
+```yml
 npm install -g credstore
-credstore
-# Optional Linux launcher entry:
-credstore --install-desktop
-# Restricted Linux/Kali containers only:
-credstore --no-sandbox
 ```
 ### from github
-```
+```yml
 npm install -g github.com:LocaMartin/credstore
-credstore
 ```
 ### For Android, use the Uptodown listing when it is published
 ```

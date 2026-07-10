@@ -4,20 +4,20 @@
   <img src="./.res/text.svg" alt="CredStore">
 </div>
 
-<p align="center"><b>1.0.6</b></p>
+<p align="center"><b>1.0.7</b></p>
 
 CredStore is a strictly offline personal credential manager for desktop, web, and Android.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![TypeScript 5](https://img.shields.io/badge/TypeScript-5-007ACC?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![Next.js 14.2.35](https://img.shields.io/badge/Next.js-14.2.35-000000?logo=next.js&logoColor=white)](https://nextjs.org/)
-[![React 18](https://img.shields.io/badge/React-18-20232A?logo=react&logoColor=61DAFB)](https://reactjs.org/)
-[![Electron 27](https://img.shields.io/badge/Electron-27-191970?logo=electron&logoColor=white)](https://www.electronjs.org/)
-[![Electron Builder 24.6.4](https://img.shields.io/badge/Electron_Builder-24.6.4-313244?logo=electronbuilder&logoColor=white)](https://www.electron.build/)
-[![Capacitor 5.5.1](https://img.shields.io/badge/Capacitor-5.5.1-119EFF?logo=capacitor&logoColor=white)](https://capacitorjs.com/)
-[![Tailwind CSS 3.3](https://img.shields.io/badge/Tailwind_CSS-3.3-06B6D4?logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
-[![Radix UI 1.x](https://img.shields.io/badge/Radix_UI-1.x-161618?logo=radixui&logoColor=white)](https://www.radix-ui.com/)
-[![Lucide 0.294](https://img.shields.io/badge/Lucide-0.294-4DBA87?logo=lucide&logoColor=white)](https://lucide.dev/)
+[![TypeScript 5.9.3](https://img.shields.io/badge/TypeScript-5.9.3-007ACC?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Next.js 16.2.10](https://img.shields.io/badge/Next.js-16.2.10-000000?logo=next.js&logoColor=white)](https://nextjs.org/)
+[![React 19.2.7](https://img.shields.io/badge/React-19.2.7-20232A?logo=react&logoColor=61DAFB)](https://react.dev/)
+[![Electron 43.1.0](https://img.shields.io/badge/Electron-43.1.0-191970?logo=electron&logoColor=white)](https://www.electronjs.org/)
+[![Electron Builder 26.15.3](https://img.shields.io/badge/Electron_Builder-26.15.3-313244?logo=electronbuilder&logoColor=white)](https://www.electron.build/)
+[![Capacitor 8.4.1](https://img.shields.io/badge/Capacitor-8.4.1-119EFF?logo=capacitor&logoColor=white)](https://capacitorjs.com/)
+[![Tailwind CSS 3.4.19](https://img.shields.io/badge/Tailwind_CSS-3.4.19-06B6D4?logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
+[![Radix UI 1.1.x](https://img.shields.io/badge/Radix_UI-1.1.x-161618?logo=radixui&logoColor=white)](https://www.radix-ui.com/)
+[![Lucide 1.24.0](https://img.shields.io/badge/Lucide-1.24.0-4DBA87?logo=lucide&logoColor=white)](https://lucide.dev/)
 [![Security AES-256-GCM](https://img.shields.io/badge/Security-AES--256--GCM-green)](https://en.wikipedia.org/wiki/Galois/Counter_Mode)
 [![Web Crypto API](https://img.shields.io/badge/Web_Crypto_API-Browser_native-000000?logo=mozilla&logoColor=white)](https://developer.mozilla.org/en-US/docs/Web/API/Web_Crypto_API)
 
@@ -61,26 +61,30 @@ https://credstore.en.uptodown.com/android
 - AES-256-GCM encrypted vault data.
 - PBKDF2-SHA-256 key derivation with 600,000 iterations and 24-byte salts.
 - Encrypted vault keys wrapped by one or more password master keys.
-- Optional fingerprint and face recognition login controls are visible on the login screen.
+- Native Android biometric keychain support for fingerprint and strong face unlock.
 - Flexible credential fields: store usernames, passwords, API secrets, URLs, tokens, notes, or any custom key/value.
 - Per-field secret masking and copy controls.
 - Credential notes are shown on saved credential cards.
 - Website, API, database, and other categories.
 - Search and category filtering.
 - Post-login settings with multiple themes and master-key management.
-- Local Sync button with one-time pairing code UI for future QR/Bluetooth/Wi-Fi device-to-device sync.
+- Offline Sync button with client/receiver modes, one-time QR generation, camera scanning, and paste fallback.
 - Android immersive full-screen mode to remove the black bezel/status area.
-- Android `FLAG_SECURE`, disabled app backup, and no Internet permission.
+- Android `FLAG_SECURE`, disabled app backup, no Internet permission, and hardcoded `credstore` deep-link scheme.
 - Electron network request blocking, permission denial, renderer sandboxing, and content protection.
 - Restrictive Content Security Policy with `connect-src 'none'`.
 
 ## Master Keys
 
-CredStore supports multiple password master keys. Each password master key wraps the same random vault key, so any
-enabled password key can unlock the vault without storing plaintext credentials or a reusable password verifier.
+CredStore supports multiple master keys. Each password master key wraps the same random vault key, so any enabled
+password key can unlock the vault without storing plaintext credentials or a reusable password verifier.
 
-Fingerprint and face recognition controls are present on the login form and in settings. Secure biometric unlock still
-requires native biometric keychain integration before those controls can unlock the vault.
+Password master keys must be at least 8 characters and include lowercase, uppercase, number, and symbol characters.
+After 10 failed unlock attempts, CredStore applies a local lockout delay.
+
+Fingerprint and face recognition keys are available on Android devices that support strong biometrics. The Android
+implementation stores a wrapped vault key through Android Keystore and requires biometric confirmation before the key can
+be used. Desktop biometric unlock is not implemented yet.
 
 ## Security Architecture
 
@@ -99,8 +103,10 @@ Offline brute force cannot be made impossible if an attacker has the encrypted v
 
 - The web app uses a CSP with `connect-src 'none'`.
 - Electron blocks non-local network requests at the session level.
+- Electron production file loading is restricted to the exported app directory.
 - Android removes the Internet permission from the merged manifest.
 - Android cleartext traffic is disabled.
+- The app uses a hardcoded `credstore` deep-link scheme.
 
 Development builds may use `localhost` for Next.js and Electron dev mode.
 
@@ -117,11 +123,13 @@ Development builds may use `localhost` for Next.js and Electron dev mode.
 
 If you forget every master key, the vault cannot be recovered. There are no recovery keys, backdoors, or server copies.
 
-Use the `Reset` button on the login screen to delete local vault data and start fresh. Reset removes both current and legacy storage keys:
+After login, open Settings and use `Reset` in the danger zone to delete local vault data and start fresh. Reset removes
+current vault storage, legacy storage, and failed-unlock lockout state:
 
 ```javascript
 localStorage.removeItem("credstore_vault_v2");
 localStorage.removeItem("credstore_data");
+localStorage.removeItem("credstore_lockout_until");
 location.reload();
 ```
 
@@ -137,11 +145,11 @@ npm run build
 npm run android:sync
 ```
 
-For Android native packaging, use JDK 17:
+For Android native packaging, use JDK 21:
 
 ```bash
 cd android
-JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 ./gradlew assembleDebug assembleRelease
+JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 ./gradlew assembleDebug assembleRelease
 ```
 
 ## Distribution
@@ -150,12 +158,6 @@ JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 ./gradlew assembleDebug assembleRel
 - npm: CLI and Electron launcher.
 - winget: Windows package distribution.
 - Uptodown: Android listing when published.
-
-## Upcoming
-
-- Native biometric keychain integration for fingerprint and face recognition unlock.
-- QR scanner and local Bluetooth/Wi-Fi sync transport.
-- Virtual scrolling for large vaults.
 
 ## Contributing
 

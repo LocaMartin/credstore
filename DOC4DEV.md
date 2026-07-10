@@ -345,6 +345,22 @@ interface Credential {
   updatedAt: string   // ISO timestamp
 }
 ```
+## Tests
+
+```bash
+npm run test:security
+npm run lint
+npx tsc --noEmit
+npm run build
+npm run android:sync
+```
+
+For Android native packaging, use JDK 21:
+
+```bash
+cd android
+JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 ./gradlew assembleDebug assembleRelease
+```
 ### Application Lifecycle
 
 #### 1. First Launch (New Vault)

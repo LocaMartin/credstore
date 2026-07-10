@@ -143,7 +143,7 @@ app.whenReady().then(() => {
 
 function installOfflineGuards() {
   session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => {
-    callback(false)
+    callback(_permission === "media")
   })
 
   session.defaultSession.webRequest.onBeforeRequest((details, callback) => {
@@ -157,7 +157,15 @@ function installOfflineGuards() {
 }
 
 function isAllowedLocalUrl(url) {
-  if (url.startsWith("file://")) return true
+  if (url.startsWith("file://")) {
+    try {
+      const appRoot = path.resolve(__dirname, "../out")
+      const requestedPath = decodeURIComponent(new URL(url).pathname)
+      return path.resolve(requestedPath).startsWith(appRoot)
+    } catch {
+      return false
+    }
+  }
   if (!isDev) return false
 
   try {

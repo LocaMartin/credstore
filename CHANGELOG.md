@@ -2,6 +2,25 @@
 
 All notable changes to CredStore will be documented in this file.
 
+## [1.0.7] - 2026-07-10
+
+### Fixed
+
+- Updated project dependencies to current major versions, including Next.js 16, React 19, Electron 43, Capacitor 8, and Electron Builder 26.
+- Added a native Android biometric plugin backed by Android Keystore for fingerprint and strong face unlock.
+- Fixed Android logo loading by using the exported app asset path and verifying Android asset sync.
+- Moved vault reset out of the public login form and into post-login Settings.
+- Made offline sync functional with client/receiver modes, one-time QR payload generation, camera scanning, and paste fallback.
+- Hardened local input handling with bounded text sanitization for credential titles, fields, values, and notes.
+- Restricted Electron production file loading to exported app files and kept the deep-link scheme hardcoded as `credstore`.
+- Raised Android min/compile/target SDK values and updated Gradle/AGP so the Android app builds with Capacitor 8.
+
+### Security
+
+- Enforced master-key policy for newly created password keys: lowercase, uppercase, number, symbol, and at least 8 characters.
+- Persisted failed-unlock lockout state after 10 failed attempts.
+- Verified production dependencies with `npm audit --omit=dev`.
+
 ## [1.0.6] - 2026-07-08
 
 ### Fixed
