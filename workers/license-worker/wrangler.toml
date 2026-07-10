@@ -1,0 +1,6 @@
+name = "credstore"
+main = "src/index.js"
+compatibility_date = "2026-07-10"
+
+[vars]
+ALLOW_UNPAID_LIFETIME = "false"

@@ -79,11 +79,15 @@ export interface SyncedDevice {
 export interface LicenseRecord {
   token: string
   plan: "community" | "enterprise"
+  kind?: "lifetime" | "trial" | "test"
+  licenseId?: string
   company: string
+  buyerEmail?: string
   maxDevices: number
   maxUsers: number
   issuedAt: string
   expiresAt?: string
+  features?: string[]
 }
 
 export interface EnterpriseProfile {

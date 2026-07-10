@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, session } = require("electron")
+const { app, BrowserWindow, Menu, ipcMain, session } = require("electron")
 const path = require("path")
 const fs = require("fs")
 const isDev = process.env.NODE_ENV === "development"
@@ -17,7 +17,9 @@ function createWindow() {
     height: 800,
     minWidth: 800,
     minHeight: 600,
+    frame: false,
     webPreferences: {
+      preload: path.join(__dirname, "preload.js"),
       nodeIntegration: false,
       contextIsolation: true,
       enableRemoteModule: false,
@@ -27,9 +29,9 @@ function createWindow() {
       sandbox: true,
     },
     icon: getIconPath(),
-    titleBarStyle: "default",
+    titleBarStyle: "hidden",
     show: false,
-    autoHideMenuBar: true, // Hide menu bar by default
+    autoHideMenuBar: true,
     title: "CredStore - Secure Credential Manager",
   })
 
@@ -116,6 +118,26 @@ function createWindow() {
     return { action: "deny" }
   })
 }
+
+ipcMain.handle("credstore:window-control", (event, action) => {
+  const window = BrowserWindow.fromWebContents(event.sender)
+  if (!window) return
+
+  if (action === "minimize") {
+    window.minimize()
+    return
+  }
+
+  if (action === "maximize") {
+    if (window.isMaximized()) window.unmaximize()
+    else window.maximize()
+    return
+  }
+
+  if (action === "close") {
+    window.close()
+  }
+})
 
 function getIconPath() {
   let iconPath

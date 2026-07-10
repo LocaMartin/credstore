@@ -50,7 +50,7 @@ export function ResetCredStore() {
         <Button
           variant="outline"
           size="sm"
-          className="mt-4 bg-white/10 border-white/20 text-white hover:bg-white/20 backdrop-blur-sm w-full"
+          className="w-full border-white/20 bg-white/10 text-white backdrop-blur-sm hover:bg-white/20"
         >
           Reset
         </Button>

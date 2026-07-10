@@ -52,6 +52,7 @@ import {
   type LicenseRecord,
 } from "@/lib/secure-vault"
 import {
+  Camera,
   Copy,
   Database,
   Eye,
@@ -69,15 +70,17 @@ import {
   Settings,
   Trash2,
   Wifi,
+  X,
 } from "lucide-react"
 import { ResetCredStore } from "@/components/reset-button"
 
-const APP_VERSION = "1.0.8"
+const APP_VERSION = "1.0.9"
 const MAX_UNLOCK_DELAY_MS = 30000
 const MAX_FAILED_UNLOCKS = 10
 const FREE_SYNC_DEVICE_LIMIT = 5
 const SYNC_FRAME_CHUNK_SIZE = 850
 const LOCKOUT_STORAGE_KEY = "credstore_lockout_until"
+const INSTALLATION_ID_STORAGE_KEY = "credstore_installation_id"
 const CREDSTORE_DEEPLINK_SCHEME = "credstore"
 const RUNTIME_LOGO_PATH = "./logo.svg"
 const LICENSE_PUBLIC_KEY_STORAGE_KEY = "credstore_license_public_key"
@@ -114,20 +117,60 @@ type CredStoreSyncFrame = {
   chunk: string
 }
 
+declare global {
+  interface Window {
+    credstoreWindow?: {
+      minimize: () => Promise<void>
+      maximize: () => Promise<void>
+      close: () => Promise<void>
+    }
+  }
+}
+
 const defaultLicensePublicKey = {
+  key_ops: ["verify"],
   kty: "EC",
   crv: "P-256",
-  x: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
-  y: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+  x: "lmOPXYcN2okOoycLnZw5k2psqE2EIMIOyCaBGRuTrKs",
+  y: "xGNS6EwTQ1DsQ1x_AFbktdYgyyUgRMoJ_V31G58Fr1A",
   ext: true,
 } satisfies JsonWebKey
 
+const TEST_LICENSE_TOKEN =
+  "eyJwbGFuIjoiZW50ZXJwcmlzZSIsImtpbmQiOiJ0ZXN0IiwibGljZW5zZUlkIjoiY3JlZHN0b3JlLXRlc3QtMjAyNiIs" +
+  "ImNvbXBhbnkiOiJMb2NhIE1hcnRpbiBUZXN0IExhYiIsImJ1eWVyRW1haWwiOiJsb2NhYm95ZmZAZ21haWwuY29tIiwibW" +
+  "F4RGV2aWNlcyI6NTAsIm1heFVzZXJzIjo1MCwiaXNzdWVkQXQiOiIyMDI2LTA3LTEwVDE5OjIxOjU2LjY1MVoiLCJmZWF0" +
+  "dXJlcyI6WyJwcmVtaXVtLXN5bmMiLCJlbXBsb3llZS1wcm9maWxlcyIsImFkbWluLWNvbnRyb2xzIiwidmlzaWJpbGl0eS" +
+  "1jb250cm9scyIsImN1c3RvbWl6YXRpb24tZmVlZGJhY2siXX0.a32epznfH08P033pr54jW4RsbD3qZWDW14kyc-1YIWvI" +
+  "fvi33EKN61xEilTgO7ybEIPuA3UbhjsV1ZZjSYLrrA"
+
+const TRIAL_LICENSE_TOKEN =
+  "eyJwbGFuIjoiZW50ZXJwcmlzZSIsImtpbmQiOiJ0cmlhbCIsImxpY2Vuc2VJZCI6ImNyZWRzdG9yZS10cmlhbC01LWRheS" +
+  "1kZW1vIiwiY29tcGFueSI6IjUgRGF5IFRyaWFsIERlbW8iLCJidXllckVtYWlsIjoidHJpYWxAZXhhbXBsZS5jb20iLCJt" +
+  "YXhEZXZpY2VzIjo1MCwibWF4VXNlcnMiOjUwLCJpc3N1ZWRBdCI6IjIwMjYtMDctMTBUMTk6MjE6NTYuNjUxWiIsImV4cG" +
+  "lyZXNBdCI6IjIwMjYtMDctMTVUMTk6MjE6NTYuNjU0WiIsImZlYXR1cmVzIjpbInByZW1pdW0tc3luYyIsImVtcGxveWVl" +
+  "LXByb2ZpbGVzIiwiYWRtaW4tY29udHJvbHMiLCJ2aXNpYmlsaXR5LWNvbnRyb2xzIiwiY3VzdG9taXphdGlvbi1mZWVkYm" +
+  "FjayJdfQ.BDwDklRgIKBxOn1vpNKhQxHetroEWirMilzA2Pu8mPBHQ6yyHo6cww5p3V47702JLGv49IRlWq_MZi2BU04tDg"
+
 function encodePayload(value: unknown) {
-  return btoa(String.fromCharCode(...Array.from(new TextEncoder().encode(JSON.stringify(value)))))
+  return bytesToBase64Url(new TextEncoder().encode(JSON.stringify(value)))
 }
 
 function decodePayload<T>(value: string): T {
-  return JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(value), (char) => char.charCodeAt(0)))) as T
+  return JSON.parse(new TextDecoder().decode(base64UrlToBytes(value))) as T
+}
+
+function bytesToBase64Url(bytes: Uint8Array) {
+  return btoa(String.fromCharCode(...Array.from(bytes)))
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/g, "")
+}
+
+function base64UrlToBytes(value: string) {
+  const normalized = value.replace(/-/g, "+").replace(/_/g, "/")
+  const padded = normalized.padEnd(normalized.length + ((4 - (normalized.length % 4)) % 4), "=")
+  return Uint8Array.from(atob(padded), (char) => char.charCodeAt(0))
 }
 
 function checksumText(value: string) {
@@ -203,6 +246,43 @@ function isSyncFrame(value: unknown): value is CredStoreSyncFrame {
   )
 }
 
+function registerCurrentDevice(data: VaultData, installationId: string, maxDevices: number) {
+  const normalized = normalizeVaultData(data)
+  const now = new Date().toISOString()
+  const metadata = normalized.metadata || normalizeVaultData(null).metadata!
+  const existingDevice = metadata.syncedDevices.find((device) => device.id === installationId)
+
+  if (!existingDevice && metadata.syncedDevices.length >= maxDevices) {
+    return { allowed: false, data: normalized }
+  }
+
+  const syncedDevices = existingDevice
+    ? metadata.syncedDevices.map((device) =>
+        device.id === installationId ? { ...device, lastSeenAt: now } : device,
+      )
+    : [
+        ...metadata.syncedDevices,
+        {
+          id: installationId,
+          label: `Device ${metadata.syncedDevices.length + 1}`,
+          firstSeenAt: now,
+          lastSeenAt: now,
+        },
+      ]
+
+  return {
+    allowed: true,
+    data: normalizeVaultData({
+      ...normalized,
+      metadata: {
+        ...metadata,
+        deviceId: installationId,
+        syncedDevices,
+      },
+    }),
+  }
+}
+
 function categoryIcon(category: CredentialCategory) {
   switch (category) {
     case "website":
@@ -218,6 +298,37 @@ function categoryIcon(category: CredentialCategory) {
 
 function LogoMark({ className }: { className: string }) {
   return <img src={RUNTIME_LOGO_PATH} alt="CredStore" className={className} draggable={false} />
+}
+
+function DesktopWindowChrome() {
+  return (
+    <div className="app-drag-region fixed left-0 right-0 top-0 z-40 hidden h-8 items-center justify-between bg-black/10 px-2 text-white/80 backdrop-blur-sm md:flex">
+      <div className="w-24" />
+      <div className="truncate text-xs font-semibold">CredStore</div>
+      <div className="app-no-drag flex w-24 justify-end gap-1">
+        <button
+          type="button"
+          aria-label="Minimize"
+          onClick={() => window.credstoreWindow?.minimize()}
+          className="h-5 w-5 rounded-full bg-white/20 hover:bg-white/30"
+        />
+        <button
+          type="button"
+          aria-label="Maximize"
+          onClick={() => window.credstoreWindow?.maximize()}
+          className="h-5 w-5 rounded-full bg-white/20 hover:bg-white/30"
+        />
+        <button
+          type="button"
+          aria-label="Close"
+          onClick={() => window.credstoreWindow?.close()}
+          className="flex h-5 w-5 items-center justify-center rounded-full bg-blue-500 text-white hover:bg-red-500"
+        >
+          <X className="h-3 w-3" />
+        </button>
+      </div>
+    </div>
+  )
 }
 
 function CredentialCard({
@@ -330,8 +441,10 @@ export default function CredStore() {
   const [biometricMessage, setBiometricMessage] = useState("")
   const [hasVault, setHasVault] = useState(false)
   const [biometricAvailability, setBiometricAvailability] = useState<BiometricAvailability>({ available: false })
+  const [installationId, setInstallationId] = useState("")
   const lastActivityRef = useRef(Date.now())
   const scanVideoRef = useRef<HTMLVideoElement | null>(null)
+  const licenseScanVideoRef = useRef<HTMLVideoElement | null>(null)
   const receivedSyncFramesRef = useRef<Record<string, CredStoreSyncFrame[]>>({})
 
   const themeClass = THEMES[theme]
@@ -392,6 +505,11 @@ export default function CredStore() {
       const storedTheme = await readStoredValue(THEME_STORAGE_KEY)
       if (storedTheme && storedTheme in THEMES) setTheme(storedTheme as ThemeName)
       setHasVault(Boolean(await readStoredValue(VAULT_STORAGE_KEY)))
+
+      const storedInstallationId = await readStoredValue(INSTALLATION_ID_STORAGE_KEY)
+      const nextInstallationId = storedInstallationId || createId()
+      if (!storedInstallationId) await writeStoredValue(INSTALLATION_ID_STORAGE_KEY, nextInstallationId)
+      setInstallationId(nextInstallationId)
 
       const storedLockout = Number(await readStoredValue(LOCKOUT_STORAGE_KEY))
       if (Number.isFinite(storedLockout) && storedLockout > Date.now()) {
@@ -464,12 +582,26 @@ export default function CredStore() {
             const decryptedVault = normalizeVaultData(
               JSON.parse(await decryptWithKey(storedVault.payload, vaultCryptoKey)) as VaultData,
             )
+            const registered = registerCurrentDevice(
+              decryptedVault,
+              installationId || createId(),
+              decryptedVault.metadata?.license?.maxDevices || FREE_SYNC_DEVICE_LIMIT,
+            )
+            if (!registered.allowed) {
+              throw new Error("Device limit reached")
+            }
+            const nextStoredVault: VaultRecord = {
+              ...storedVault,
+              payload: await encryptWithKey(JSON.stringify(registered.data satisfies VaultData), vaultCryptoKey),
+              updatedAt: new Date().toISOString(),
+            }
+            await writeStoredValue(VAULT_STORAGE_KEY, JSON.stringify(nextStoredVault))
 
-            setVaultRecord(storedVault)
+            setVaultRecord(nextStoredVault)
             setVaultKey(nextVaultKey)
-            setVaultData(decryptedVault)
-            setActiveLicense(decryptedVault.metadata?.license || null)
-            setCredentials(decryptedVault.credentials)
+            setVaultData(registered.data)
+            setActiveLicense(registered.data.metadata?.license || null)
+            setCredentials(registered.data.credentials)
             setIsLocked(false)
             setMasterPassword("")
             setFailedUnlocks(0)
@@ -502,7 +634,11 @@ export default function CredStore() {
         : []
       const vaultCryptoKey = await importVaultKey(nextVaultKey)
       const createdAt = new Date().toISOString()
-      const nextVaultData = normalizeVaultData({ credentials: migratedCredentials })
+      const nextVaultData = registerCurrentDevice(
+        normalizeVaultData({ credentials: migratedCredentials }),
+        installationId || createId(),
+        FREE_SYNC_DEVICE_LIMIT,
+      ).data
       const nextRecord: VaultRecord = {
         version: 2,
         payload: await encryptWithKey(JSON.stringify(nextVaultData satisfies VaultData), vaultCryptoKey),
@@ -541,24 +677,39 @@ export default function CredStore() {
         await writeStoredValue(LOCKOUT_STORAGE_KEY, String(nextUnlockTime))
       }
     }
-  }, [failedUnlocks, masterPassword, unlockDelayUntil])
+  }, [failedUnlocks, installationId, masterPassword, unlockDelayUntil])
 
   const unlockWithVaultKey = useCallback(async (storedVault: VaultRecord, nextVaultKey: Uint8Array) => {
     const vaultCryptoKey = await importVaultKey(nextVaultKey)
     const decryptedVault = normalizeVaultData(JSON.parse(await decryptWithKey(storedVault.payload, vaultCryptoKey)) as VaultData)
+    const registered = registerCurrentDevice(
+      decryptedVault,
+      installationId || createId(),
+      decryptedVault.metadata?.license?.maxDevices || FREE_SYNC_DEVICE_LIMIT,
+    )
+    if (!registered.allowed) {
+      setBiometricMessage("Device limit reached. Add an enterprise license from an already-authorized device.")
+      return
+    }
+    const nextStoredVault: VaultRecord = {
+      ...storedVault,
+      payload: await encryptWithKey(JSON.stringify(registered.data satisfies VaultData), vaultCryptoKey),
+      updatedAt: new Date().toISOString(),
+    }
+    await writeStoredValue(VAULT_STORAGE_KEY, JSON.stringify(nextStoredVault))
 
-    setVaultRecord(storedVault)
+    setVaultRecord(nextStoredVault)
     setVaultKey(nextVaultKey)
-    setVaultData(decryptedVault)
-    setActiveLicense(decryptedVault.metadata?.license || null)
-    setCredentials(decryptedVault.credentials)
+    setVaultData(registered.data)
+    setActiveLicense(registered.data.metadata?.license || null)
+    setCredentials(registered.data.credentials)
     setIsLocked(false)
     setMasterPassword("")
     setFailedUnlocks(0)
     setUnlockDelayUntil(0)
     await removeStoredValue(LOCKOUT_STORAGE_KEY)
     lastActivityRef.current = Date.now()
-  }, [])
+  }, [installationId])
 
   const handleBiometricUnlock = useCallback(
     async (type: "fingerprint" | "face") => {
@@ -749,6 +900,11 @@ export default function CredStore() {
 
   const createSyncCode = useCallback(() => {
     if (!vaultRecord) return
+    const deviceCount = vaultData.metadata?.syncedDevices.length || 1
+    if (deviceCount >= maxSyncDevices) {
+      setSyncMessage(`Device sync limit reached (${deviceCount}/${maxSyncDevices}). Add an enterprise license to sync more devices.`)
+      return
+    }
 
     const frames = createSyncFrames(vaultRecord)
     setSyncFrames(frames)
@@ -760,7 +916,7 @@ export default function CredStore() {
         ? `Generated ${frames.length} QR frames. Scan every frame on the receiver.`
         : "One QR frame generated. Scan it on the receiver.",
     )
-  }, [vaultRecord])
+  }, [maxSyncDevices, vaultData.metadata?.syncedDevices.length, vaultRecord])
 
   const importSyncPayload = useCallback(
     async (payload = syncImportText) => {
@@ -900,7 +1056,7 @@ export default function CredStore() {
       ["verify"],
     )
     const payloadBytes = new TextEncoder().encode(payloadPart)
-    const signature = base64ToBytes(signaturePart)
+    const signature = base64UrlToBytes(signaturePart)
     const verified = await crypto.subtle.verify({ name: "ECDSA", hash: "SHA-256" }, publicKey, signature, payloadBytes)
     if (!verified) throw new Error("License signature is invalid")
 
@@ -912,6 +1068,50 @@ export default function CredStore() {
     return {
       ...payload,
       token,
+    }
+  }, [])
+
+  const scanLicenseQr = useCallback(async () => {
+    setLicenseMessage("")
+
+    const BarcodeDetectorCtor = (window as unknown as {
+      BarcodeDetector?: new (options: { formats: string[] }) => {
+        detect: (source: HTMLVideoElement) => Promise<Array<{ rawValue?: string }>>
+      }
+    }).BarcodeDetector
+
+    if (!BarcodeDetectorCtor || !navigator.mediaDevices?.getUserMedia) {
+      setLicenseMessage("Camera QR scanning is not available here. Paste the license token instead.")
+      return
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+      const video = licenseScanVideoRef.current
+      if (!video) return
+
+      video.srcObject = stream
+      await video.play()
+
+      const detector = new BarcodeDetectorCtor({ formats: ["qr_code"] })
+      const deadline = Date.now() + 30000
+
+      while (Date.now() < deadline) {
+        const results = await detector.detect(video)
+        const rawValue = results[0]?.rawValue
+        if (rawValue) {
+          stream.getTracks().forEach((track) => track.stop())
+          setLicenseToken(rawValue.trim())
+          setLicenseMessage("License QR scanned. Press Validate Offline License.")
+          return
+        }
+        await new Promise((resolve) => window.setTimeout(resolve, 350))
+      }
+
+      stream.getTracks().forEach((track) => track.stop())
+      setLicenseMessage("No license QR detected. Try again or paste the token.")
+    } catch {
+      setLicenseMessage("Camera access failed. Paste the license token instead.")
     }
   }, [])
 
@@ -988,9 +1188,10 @@ export default function CredStore() {
   if (isLocked) {
     return (
       <main
-        className={`min-h-dvh bg-gradient-to-br ${themeClass} flex items-center justify-center p-4`}
-        style={{ paddingTop: "max(1rem, env(safe-area-inset-top))", paddingBottom: "max(1rem, env(safe-area-inset-bottom))" }}
+        className={`min-h-dvh bg-gradient-to-br ${themeClass} flex items-center justify-center p-4 md:pt-12`}
+        style={{ paddingTop: "max(2.75rem, env(safe-area-inset-top))", paddingBottom: "max(1rem, env(safe-area-inset-bottom))" }}
       >
+        <DesktopWindowChrome />
         <Card className="w-full max-w-sm border-white/10 bg-white/5 shadow-lg">
           <CardHeader className="pb-4 text-center">
             <LogoMark className="mx-auto mb-3 h-12 w-12" />
@@ -1060,9 +1261,10 @@ export default function CredStore() {
 
   return (
     <main
-      className={`min-h-dvh bg-gradient-to-br ${themeClass}`}
-      style={{ paddingTop: "max(0.75rem, env(safe-area-inset-top))", paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
+      className={`min-h-dvh bg-gradient-to-br ${themeClass} md:pt-8`}
+      style={{ paddingTop: "max(2.5rem, env(safe-area-inset-top))", paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
     >
+      <DesktopWindowChrome />
       <div className="mx-auto max-w-4xl space-y-4 px-3 pb-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0 flex items-center gap-2">
@@ -1199,13 +1401,18 @@ export default function CredStore() {
                   Settings
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-md border-gray-700 bg-gray-900/95 text-white">
+              <DialogContent className="max-h-[calc(100dvh-4rem)] w-[calc(100vw-1rem)] max-w-5xl overflow-hidden border-gray-700 bg-gray-900/95 p-0 text-white">
                 <DialogHeader>
-                  <DialogTitle className="text-sm">Settings</DialogTitle>
-                  <DialogDescription className="text-xs text-gray-400">Theme and master key settings are only available after login.</DialogDescription>
+                  <div className="border-b border-white/10 px-5 py-4">
+                    <DialogTitle className="text-sm">Settings</DialogTitle>
+                    <DialogDescription className="text-xs text-gray-400">
+                      Theme, master keys, enterprise licensing, profiles, and reset are only available after login.
+                    </DialogDescription>
+                  </div>
                 </DialogHeader>
-                <div className="space-y-4">
-                  <div className="space-y-2">
+                <div className="grid max-h-[calc(100dvh-9rem)] gap-4 overflow-y-auto p-5 lg:grid-cols-2">
+                  <div className="space-y-4">
+                  <section className="space-y-2 rounded-md border border-white/10 bg-white/5 p-3">
                     <Label className="text-xs">Theme</Label>
                     <Select value={theme} onValueChange={(value) => changeTheme(value as ThemeName)}>
                       <SelectTrigger className="border-white/20 bg-white/5 text-white">
@@ -1218,8 +1425,8 @@ export default function CredStore() {
                         <SelectItem value="rose">Rose</SelectItem>
                       </SelectContent>
                     </Select>
-                  </div>
-                  <div className="space-y-2">
+                  </section>
+                  <section className="space-y-2 rounded-md border border-white/10 bg-white/5 p-3">
                     <Label className="text-xs">Master Keys</Label>
                     <div className="space-y-2">
                       {vaultRecord?.keySlots.map((slot) => (
@@ -1283,8 +1490,11 @@ export default function CredStore() {
                         Face
                       </Button>
                     </div>
+                    <p className="text-xs text-gray-400">{describeBiometricAvailability(biometricAvailability)}</p>
+                  </section>
                   </div>
-                  <div className="space-y-2 border-t border-white/10 pt-4">
+                  <div className="space-y-4">
+                  <section className="space-y-2 rounded-md border border-white/10 bg-white/5 p-3">
                     <div className="flex items-center justify-between gap-2">
                       <Label className="text-xs">Enterprise License</Label>
                       <Badge className="bg-white/10 text-gray-200">
@@ -1305,18 +1515,59 @@ export default function CredStore() {
                       className="min-h-[72px] border-white/20 bg-white/5 text-xs text-white"
                       placeholder="Paste signed enterprise license token"
                     />
-                    <Button
-                      type="button"
-                      onClick={applyLicense}
-                      disabled={!licenseToken.trim()}
-                      className="w-full bg-gradient-to-r from-purple-500 to-blue-500 text-xs"
-                    >
-                      <ShieldCheck className="mr-1 h-3 w-3" />
-                      Validate Offline License
-                    </Button>
+                    <video
+                      ref={licenseScanVideoRef}
+                      className="aspect-video w-full rounded-md border border-white/10 bg-black object-cover"
+                      muted
+                      playsInline
+                    />
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      <Button
+                        type="button"
+                        onClick={scanLicenseQr}
+                        variant="outline"
+                        className="border-white/20 bg-white/5 text-xs text-white hover:bg-white/10"
+                      >
+                        <Camera className="mr-1 h-3 w-3" />
+                        Scan License QR
+                      </Button>
+                      <Button
+                        type="button"
+                        onClick={applyLicense}
+                        disabled={!licenseToken.trim()}
+                        className="bg-gradient-to-r from-purple-500 to-blue-500 text-xs"
+                      >
+                        <ShieldCheck className="mr-1 h-3 w-3" />
+                        Validate Offline License
+                      </Button>
+                    </div>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => {
+                          setLicenseToken(TEST_LICENSE_TOKEN)
+                          setLicenseMessage("Test license loaded. Press Validate Offline License.")
+                        }}
+                        className="border-white/20 bg-white/5 text-xs text-white hover:bg-white/10"
+                      >
+                        Load Test Key
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => {
+                          setLicenseToken(TRIAL_LICENSE_TOKEN)
+                          setLicenseMessage("5-day trial license loaded. Press Validate Offline License.")
+                        }}
+                        className="border-white/20 bg-white/5 text-xs text-white hover:bg-white/10"
+                      >
+                        Load 5-Day Trial
+                      </Button>
+                    </div>
                     {licenseMessage && <p className="text-xs text-gray-300">{licenseMessage}</p>}
-                  </div>
-                  <div className="space-y-2 border-t border-white/10 pt-4">
+                  </section>
+                  <section className="space-y-2 rounded-md border border-white/10 bg-white/5 p-3">
                     <Label className="text-xs">Employee Profiles</Label>
                     <p className="text-xs text-gray-400">
                       Profiles are stored inside the encrypted vault. Visibility rules use the profile/role metadata foundation for enterprise ACLs.
@@ -1350,10 +1601,11 @@ export default function CredStore() {
                         Add
                       </Button>
                     </div>
-                  </div>
-                  <div className="space-y-2 border-t border-white/10 pt-4">
+                  </section>
+                  <section className="space-y-2 rounded-md border border-red-400/30 bg-red-500/10 p-3">
                     <Label className="text-xs">Danger Zone</Label>
                     <ResetCredStore />
+                  </section>
                   </div>
                 </div>
               </DialogContent>

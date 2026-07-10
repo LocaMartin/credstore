@@ -2,6 +2,24 @@
 
 All notable changes to CredStore will be documented in this file.
 
+## [1.0.9] - 2026-07-11
+
+### Fixed
+
+- Removed the native Electron window frame on desktop and added minimal in-app window controls to remove Linux titlebar/bezel space.
+- Reworked Settings into a wider landscape-friendly panel with two columns, internal scrolling, and a visible danger-zone reset button.
+- Added license QR scanning in Settings alongside paste-based offline license validation.
+- Switched license token parsing to base64url so copied and QR-encoded tokens survive transport reliably.
+- Clarified biometric support: Android strong biometrics are implemented; desktop and iOS require separate native integrations.
+
+### Added
+
+- Added a separate GitHub Pages license portal source at `web/license-portal/`.
+- Added a Cloudflare Worker license signer at `workers/license-worker/` that signs offline licenses with a Worker secret.
+- Added built-in test and 5-day trial license tokens for local premium feature testing.
+- Added `LICENSE-PRO.md` and `premium/pro/` for future commercial-only features under a separate license.
+- Expanded README dual-licensing, sponsorship, anti-piracy, and open-core guidance.
+
 ## [1.0.8] - 2026-07-10
 
 ### Fixed

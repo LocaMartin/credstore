@@ -4,7 +4,7 @@
   <img src="./.res/text.svg" alt="CredStore">
 </div>
 
-<p align="center"><b>1.0.8</b></p>
+<p align="center"><b>1.0.9</b></p>
 
 CredStore is a strictly offline personal credential manager for desktop, web, and Android.
 
@@ -72,7 +72,7 @@ https://credstore.en.uptodown.com/android
 - Offline Sync button with client/receiver modes, chunked one-time QR generation, camera scanning, and paste fallback.
 - Community sync for up to 5 devices, with signed offline enterprise licenses for larger teams.
 - Employee profile and role metadata foundation for enterprise visibility controls.
-- Android immersive full-screen mode to remove the black bezel/status area.
+- Android edge-to-edge layout and frameless Electron desktop windows to remove black bezel/titlebar space.
 - Android `FLAG_SECURE`, disabled app backup, no Internet permission, and hardcoded `credstore` deep-link scheme.
 - Electron network request blocking, permission denial, renderer sandboxing, and content protection.
 - Restrictive Content Security Policy with `connect-src 'none'`.
@@ -87,7 +87,12 @@ After 10 failed unlock attempts, CredStore applies a local lockout delay.
 
 Fingerprint and face recognition keys are available on Android devices that support strong biometrics. The Android
 implementation stores a wrapped vault key through Android Keystore and requires biometric confirmation before the key can
-be used. Desktop biometric unlock is not implemented yet.
+be used.
+
+Desktop biometric unlock is not implemented. There is no single secure package that covers Android, iOS, Windows, macOS,
+and Linux hardware biometrics with vault-key unwrapping. iOS needs an Apple LocalAuthentication Capacitor plugin. macOS,
+Windows, and Linux need separate Electron main-process integrations; Linux biometric support usually depends on local
+PAM/fprintd configuration and is not reliable enough to present as a default unlock method.
 
 ## Security Architecture
 
@@ -113,17 +118,62 @@ Offline brute force cannot be made impossible if an attacker has the encrypted v
 
 Development builds may use `localhost` for Next.js and Electron dev mode.
 
-## Enterprise & Team Use
+## Dual-Licensing & Why Sponsor CredStore?
 
-CredStore keeps the community edition public and open source. Enterprise users can buy a signed offline corporate license
-for higher local sync limits, team profile management, and future enterprise controls.
+CredStore is fundamentally built on a zero-knowledge, client-side open-source architecture. The core codebase is proudly
+licensed under the permissive MIT License because transparency is non-negotiable in security tools.
 
-- Community edition: free local vault use and sync for up to 5 devices.
-- Enterprise edition: signed offline license token with higher device/user limits.
-- License validation happens locally in the app with a public verification key.
-- License generation must happen outside this public repository with a private signing key. Do not put the signing key in
-  GitHub Pages JavaScript.
-- Corporate deployments can receive a lifetime right-to-use certificate and direct support terms.
+However, building cross-platform environments, maintaining native security wrappers like Android Keystore and Electron
+sandbox isolation, and hosting packages on official storefronts incurs real-world platform fees.
+
+We balance this using an Open-Core model based on convenience and scale.
+
+### 1. Frictionless Distribution vs. Manual Compilation
+
+- The Free Path: You can freely clone this repository, install dependencies via Node.js, compile your own Electron
+  desktop binaries, use the local terminal engine, or sign an Android APK/AAB target with your own developer keys.
+- The Paid Path: When you purchase CredStore on the official app stores, you are paying for frictionless convenience. You
+  receive a signed, code-verified, sandboxed, and auto-updating application with a single click. Your app store purchase
+  directly funds ongoing developer ecosystem fees.
+
+### 2. Community vs. Enterprise & Team Edition
+
+To accommodate normal personal use while funding large-scale operational tools, the software enforces scale boundaries
+locally:
+
+- Community Edition (Free): Completely free local vault management and secure chunked QR-code synchronization for up to
+  5 local devices.
+- Enterprise Edition (Paid): Designed for businesses and collaborative privacy teams requiring structured profile
+  management, employee/admin access metadata controls, and synchronization across larger hardware fleets.
+
+### 3. Local License Verification (Privacy First)
+
+True to the strictly offline app design policy, license token validation happens locally using asymmetric public-key
+cryptography. The application reads a signed offline token; it never speaks to a license activation server or exposes your
+footprint to the internet.
+
+License generation happens outside the app:
+
+- GitHub Pages source: `web/license-portal/`
+- Cloudflare Worker signer: `workers/license-worker/`
+- Commercial/proprietary source area: `premium/pro/`
+- Commercial license terms: `LICENSE-PRO.md`
+
+The static website must never contain the private signing key. The Cloudflare Worker signs tokens with
+`LICENSE_PRIVATE_JWK` stored as a Worker secret. The app ships only the public verification key.
+
+Offline anti-piracy cannot completely stop someone from copying a license token or photographing a QR code. CredStore can
+reduce abuse with signed tokens, buyer/company metadata, local device limits, screenshot protection where supported by the
+OS, and commercial terms. It cannot provide server-style activation enforcement without becoming an online app.
+
+## Supporting the Mission
+
+If CredStore secures your personal data infrastructure, consider fueling its development:
+
+- Sponsor the Project: Support via [GitHub Sponsors](https://github.com/sponsors/LocaMartin) or Open Collective to help
+  execute roadmap items like local Bluetooth/Wi-Fi transport channels.
+- Corporate Backing: Privacy-focused organizations and security firms can secure premium visibility slots on repository
+  documentation by choosing a corporate sponsorship tier.
 
 ## Encryption Process
 

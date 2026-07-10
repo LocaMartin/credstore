@@ -1,0 +1,359 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CredStore Pro License</title>
+    <meta
+      name="description"
+      content="Generate signed offline CredStore Pro and Enterprise license tokens."
+    />
+    <link rel="icon" href="../../.res/logo.svg" />
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0b1020;
+        --panel: #121a2f;
+        --panel-2: #18213a;
+        --text: #f8fafc;
+        --muted: #aab4c4;
+        --line: rgba(255, 255, 255, 0.14);
+        --primary: #8b5cf6;
+        --primary-2: #3b82f6;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: radial-gradient(circle at 20% 0%, #42145f 0, transparent 34%),
+          linear-gradient(135deg, #12113b 0%, #0b1020 55%, #12213f 100%);
+        color: var(--text);
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      main {
+        width: min(1120px, calc(100vw - 32px));
+        margin: 0 auto;
+        padding: 48px 0;
+      }
+
+      header {
+        display: grid;
+        gap: 16px;
+        margin-bottom: 28px;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .brand img {
+        width: 44px;
+        height: 44px;
+      }
+
+      h1,
+      h2,
+      p {
+        margin: 0;
+      }
+
+      h1 {
+        font-size: clamp(32px, 5vw, 56px);
+        line-height: 1;
+      }
+
+      h2 {
+        font-size: 18px;
+      }
+
+      .muted {
+        color: var(--muted);
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 18px;
+      }
+
+      .panel {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: rgba(18, 26, 47, 0.86);
+        padding: 20px;
+        backdrop-filter: blur(18px);
+      }
+
+      .stack {
+        display: grid;
+        gap: 12px;
+      }
+
+      label {
+        display: grid;
+        gap: 6px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      input,
+      select,
+      textarea {
+        width: 100%;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: var(--panel-2);
+        color: var(--text);
+        padding: 11px 12px;
+        font: inherit;
+      }
+
+      textarea {
+        min-height: 120px;
+        resize: vertical;
+      }
+
+      button,
+      .button {
+        border: 0;
+        border-radius: 6px;
+        background: linear-gradient(135deg, var(--primary), var(--primary-2));
+        color: white;
+        padding: 11px 14px;
+        font: inherit;
+        font-weight: 700;
+        cursor: pointer;
+        text-align: center;
+        text-decoration: none;
+      }
+
+      .button.secondary,
+      button.secondary {
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.07);
+      }
+
+      .actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
+
+      pre {
+        overflow: auto;
+        white-space: pre-wrap;
+        word-break: break-all;
+        border-radius: 6px;
+        background: #060914;
+        padding: 12px;
+      }
+
+      #qr {
+        display: grid;
+        justify-items: center;
+        border-radius: 6px;
+        background: white;
+        padding: 16px;
+        min-height: 224px;
+      }
+
+      @media (max-width: 860px) {
+        .grid,
+        .actions {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div class="brand">
+          <img src="../../.res/logo.svg" alt="CredStore" />
+          <strong>CredStore Pro</strong>
+        </div>
+        <h1>Offline Enterprise License Generator</h1>
+        <p class="muted">
+          Buy a lifetime license, request a 5-day trial, or contact support. License validation happens locally inside
+          CredStore.
+        </p>
+      </header>
+
+      <section class="grid">
+        <form id="license-form" class="panel stack">
+          <h2>Generate License</h2>
+          <label>
+            License type
+            <select name="kind">
+              <option value="lifetime">Lifetime Pro / Enterprise - $100</option>
+              <option value="trial">5-day free trial</option>
+            </select>
+          </label>
+          <label>
+            Company or buyer name
+            <input name="company" required maxlength="120" placeholder="Company Inc." />
+          </label>
+          <label>
+            Email
+            <input name="buyerEmail" type="email" required maxlength="160" placeholder="security@example.com" />
+          </label>
+          <div class="actions">
+            <a
+              class="button secondary"
+              id="upi-link"
+              href="upi://pay?pa=locamartin@upi&pn=Loca%20Martin&am=100&cu=USD&tn=CredStore%20Lifetime%20License"
+            >
+              Pay by UPI
+            </a>
+            <a class="button secondary" id="paypal-link" href="https://paypal.me/locamartin/100" target="_blank" rel="noreferrer">
+              PayPal / Card
+            </a>
+          </div>
+          <label>
+            Payment provider
+            <select name="paymentProvider">
+              <option value="upi">UPI</option>
+              <option value="paypal">PayPal</option>
+              <option value="card">Card</option>
+              <option value="trial">Trial</option>
+            </select>
+          </label>
+          <label>
+            Payment reference
+            <input name="paymentReference" maxlength="180" placeholder="UPI/PayPal/Card transaction ID" />
+          </label>
+          <button type="submit">Generate Signed License</button>
+          <p class="muted">
+            Card checkout needs your own Stripe/Razorpay/PayPal Business link configured in the page or Worker
+            environment. Do not put private signing keys in this static page.
+          </p>
+        </form>
+
+        <section class="panel stack">
+          <h2>Generated Key</h2>
+          <div id="qr"></div>
+          <pre id="license-output">No license generated yet.</pre>
+          <div class="actions">
+            <button id="copy-license" class="secondary" type="button">Copy License</button>
+            <button id="download-license" class="secondary" type="button">Download .txt</button>
+          </div>
+          <p id="license-status" class="muted"></p>
+        </section>
+
+        <form id="contact-form" class="panel stack">
+          <h2>Contact / Feedback</h2>
+          <label>
+            Name
+            <input name="name" required maxlength="120" />
+          </label>
+          <label>
+            Email
+            <input name="email" type="email" required maxlength="160" />
+          </label>
+          <label>
+            Message
+            <textarea name="message" required maxlength="4000" placeholder="Ask anything about CredStore Pro."></textarea>
+          </label>
+          <button type="submit">Send Message</button>
+          <p id="contact-status" class="muted"></p>
+        </form>
+
+        <section class="panel stack">
+          <h2>Anti-piracy model</h2>
+          <p class="muted">
+            Offline apps cannot completely prevent someone from copying a license token. CredStore reduces abuse by using
+            signed tokens, local device limits, optional company/buyer metadata, no online activation tracking, and
+            screenshot protection inside the desktop/mobile app where the OS supports it.
+          </p>
+        </section>
+      </section>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js" defer></script>
+    <script>
+      const workerBase = "https://credstore.locamartin.workers.dev";
+      let currentLicense = "";
+
+      function formData(form) {
+        return Object.fromEntries(new FormData(form).entries());
+      }
+
+      function setLicense(token) {
+        currentLicense = token;
+        document.getElementById("license-output").textContent = token;
+        const qr = document.getElementById("qr");
+        qr.innerHTML = "";
+        if (window.QRCode) {
+          window.QRCode.toCanvas(token, { width: 224, errorCorrectionLevel: "H" }, (error, canvas) => {
+            if (error) {
+              qr.textContent = "QR generation failed.";
+              return;
+            }
+            qr.appendChild(canvas);
+          });
+        }
+      }
+
+      document.getElementById("license-form").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const status = document.getElementById("license-status");
+        status.textContent = "Generating license...";
+        try {
+          const response = await fetch(`${workerBase}/licenses`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(formData(event.currentTarget)),
+          });
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.error || "License generation failed.");
+          setLicense(data.license);
+          status.textContent = data.message || "License generated.";
+        } catch (error) {
+          status.textContent = error instanceof Error ? error.message : "License generation failed.";
+        }
+      });
+
+      document.getElementById("contact-form").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const status = document.getElementById("contact-status");
+        status.textContent = "Sending...";
+        try {
+          const response = await fetch(`${workerBase}/contact`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(formData(event.currentTarget)),
+          });
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.error || "Message failed.");
+          status.textContent = "Message received.";
+          event.currentTarget.reset();
+        } catch (error) {
+          status.textContent = error instanceof Error ? error.message : "Message failed.";
+        }
+      });
+
+      document.getElementById("copy-license").addEventListener("click", async () => {
+        if (!currentLicense) return;
+        await navigator.clipboard.writeText(currentLicense);
+        document.getElementById("license-status").textContent = "License copied.";
+      });
+
+      document.getElementById("download-license").addEventListener("click", () => {
+        if (!currentLicense) return;
+        const blob = new Blob([currentLicense], { type: "text/plain" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = "credstore-license.txt";
+        link.click();
+        URL.revokeObjectURL(url);
+      });
+    </script>
+  </body>
+</html>
