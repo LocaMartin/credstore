@@ -2,6 +2,22 @@
 
 All notable changes to CredStore will be documented in this file.
 
+## [1.0.10] - 2026-07-11
+
+### Changed
+
+- Removed Cloudflare Worker backend source from the public repository. Worker signing logic is now managed directly in the
+  Cloudflare Dashboard with secrets and environment variables.
+- Added ignore rules for local Worker source, Wrangler config, and Wrangler cache files.
+- Updated README to document Cloudflare variables instead of committed Worker files.
+
+### Security
+
+- Added vault account identity metadata for offline license binding.
+- License validation now rejects signed licenses bound to a different CredStore account identity.
+- Added the account identity to Settings so paid licenses can be generated for a specific vault without binding to one
+  physical device.
+
 ## [1.0.9] - 2026-07-11
 
 ### Fixed
@@ -15,7 +31,7 @@ All notable changes to CredStore will be documented in this file.
 ### Added
 
 - Added a separate GitHub Pages license portal source at `web/license-portal/`.
-- Added a Cloudflare Worker license signer at `workers/license-worker/` that signs offline licenses with a Worker secret.
+- Added Cloudflare Worker license signer source for initial deployment.
 - Added built-in test and 5-day trial license tokens for local premium feature testing.
 - Added `LICENSE-PRO.md` and `premium/pro/` for future commercial-only features under a separate license.
 - Expanded README dual-licensing, sponsorship, anti-piracy, and open-core guidance.

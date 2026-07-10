@@ -74,7 +74,7 @@ import {
 } from "lucide-react"
 import { ResetCredStore } from "@/components/reset-button"
 
-const APP_VERSION = "1.0.9"
+const APP_VERSION = "1.0.10"
 const MAX_UNLOCK_DELAY_MS = 30000
 const MAX_FAILED_UNLOCKS = 10
 const FREE_SYNC_DEVICE_LIMIT = 5
@@ -1064,12 +1064,19 @@ export default function CredStore() {
     if (payload.expiresAt && Date.parse(payload.expiresAt) < Date.now()) {
       throw new Error("License is expired")
     }
+    if (
+      payload.accountIdentity &&
+      vaultData.metadata?.accountIdentity &&
+      payload.accountIdentity !== vaultData.metadata.accountIdentity
+    ) {
+      throw new Error("License belongs to a different CredStore account identity")
+    }
 
     return {
       ...payload,
       token,
     }
-  }, [])
+  }, [vaultData.metadata?.accountIdentity])
 
   const scanLicenseQr = useCallback(async () => {
     setLicenseMessage("")
@@ -1504,6 +1511,24 @@ export default function CredStore() {
                     <p className="text-xs text-gray-400">
                       Community sync allows {FREE_SYNC_DEVICE_LIMIT} devices. A signed enterprise license unlocks higher offline limits.
                     </p>
+                    <div className="rounded-md border border-white/10 bg-black/20 p-2">
+                      <div className="mb-1 flex items-center justify-between gap-2">
+                        <span className="text-xs text-gray-400">Account Identity</span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => copyToClipboard(vaultData.metadata?.accountIdentity || "")}
+                          className="h-6 px-2 text-xs text-gray-200 hover:bg-white/10"
+                        >
+                          <Copy className="mr-1 h-3 w-3" />
+                          Copy
+                        </Button>
+                      </div>
+                      <p className="break-all font-mono text-[11px] text-gray-300">
+                        {vaultData.metadata?.accountIdentity || "Unavailable"}
+                      </p>
+                    </div>
                     {activeLicense && (
                       <p className="text-xs text-gray-300">
                         {activeLicense.company}: up to {activeLicense.maxDevices} devices and {activeLicense.maxUsers} users.

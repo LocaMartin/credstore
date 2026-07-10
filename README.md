@@ -4,7 +4,7 @@
   <img src="./.res/text.svg" alt="CredStore">
 </div>
 
-<p align="center"><b>1.0.9</b></p>
+<p align="center"><b>1.0.10</b></p>
 
 CredStore is a strictly offline personal credential manager for desktop, web, and Android.
 
@@ -155,12 +155,22 @@ footprint to the internet.
 License generation happens outside the app:
 
 - GitHub Pages source: `web/license-portal/`
-- Cloudflare Worker signer: `workers/license-worker/`
+- Cloudflare Worker signer: managed in the Cloudflare Dashboard, not committed to this repository.
 - Commercial/proprietary source area: `premium/pro/`
 - Commercial license terms: `LICENSE-PRO.md`
 
 The static website must never contain the private signing key. The Cloudflare Worker signs tokens with
 `LICENSE_PRIVATE_JWK` stored as a Worker secret. The app ships only the public verification key.
+
+The Worker should read secrets and variables from Cloudflare, not source files:
+
+- `LICENSE_PRIVATE_JWK`: Worker secret containing the private signing key.
+- `ALLOW_UNPAID_LIFETIME`: Worker variable for manual/testing behavior.
+- `TEST_KEY_SECRET`: optional Worker secret for internal test-license issuance.
+- `CONTACT_WEBHOOK_URL`: optional Worker secret for contact form delivery.
+
+Paid licenses can be bound to the account identity shown in CredStore Settings. A copied license token or QR screenshot
+will be rejected by a different vault if the signed `accountIdentity` does not match.
 
 Offline anti-piracy cannot completely stop someone from copying a license token or photographing a QR code. CredStore can
 reduce abuse with signed tokens, buyer/company metadata, local device limits, screenshot protection where supported by the

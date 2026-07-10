@@ -65,6 +65,7 @@ export interface VaultData {
 
 export interface VaultMetadata {
   deviceId: string
+  accountIdentity: string
   syncedDevices: SyncedDevice[]
   license?: LicenseRecord
 }
@@ -83,6 +84,7 @@ export interface LicenseRecord {
   licenseId?: string
   company: string
   buyerEmail?: string
+  accountIdentity?: string
   maxDevices: number
   maxUsers: number
   issuedAt: string
@@ -148,6 +150,7 @@ export const createDefaultVaultMetadata = (): VaultMetadata => {
 
   return {
     deviceId: createId(),
+    accountIdentity: createId(),
     syncedDevices: [
       {
         id: createId(),
@@ -186,10 +189,14 @@ export const createDefaultEnterpriseState = () => {
 
 export const normalizeVaultData = (data: Partial<VaultData> | null | undefined): VaultData => {
   const enterprise = createDefaultEnterpriseState()
+  const metadata = data?.metadata || createDefaultVaultMetadata()
 
   return {
     credentials: data?.credentials || [],
-    metadata: data?.metadata || createDefaultVaultMetadata(),
+    metadata: {
+      ...metadata,
+      accountIdentity: metadata.accountIdentity || createId(),
+    },
     profiles: data?.profiles?.length ? data.profiles : enterprise.profiles,
     roles: data?.roles?.length ? data.roles : enterprise.roles,
   }
