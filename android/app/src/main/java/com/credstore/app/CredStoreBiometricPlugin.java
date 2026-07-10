@@ -37,8 +37,10 @@ public class CredStoreBiometricPlugin extends Plugin {
     public void isAvailable(PluginCall call) {
         Context context = getContext();
         BiometricManager manager = BiometricManager.from(context);
+        int resultCode = manager.canAuthenticate(AUTHENTICATORS);
         JSObject result = new JSObject();
-        result.put("available", manager.canAuthenticate(AUTHENTICATORS) == BiometricManager.BIOMETRIC_SUCCESS);
+        result.put("available", resultCode == BiometricManager.BIOMETRIC_SUCCESS);
+        result.put("code", describeAvailability(resultCode));
         call.resolve(result);
     }
 
@@ -184,5 +186,28 @@ public class CredStoreBiometricPlugin extends Plugin {
 
         keyGenerator.init(keySpec);
         return keyGenerator.generateKey();
+    }
+
+    private String describeAvailability(int resultCode) {
+        if (resultCode == BiometricManager.BIOMETRIC_SUCCESS) {
+            return "AVAILABLE";
+        }
+        if (resultCode == BiometricManager.BIOMETRIC_ERROR_NO_HARDWARE) {
+            return "NO_HARDWARE";
+        }
+        if (resultCode == BiometricManager.BIOMETRIC_ERROR_HW_UNAVAILABLE) {
+            return "UNAVAILABLE";
+        }
+        if (resultCode == BiometricManager.BIOMETRIC_ERROR_NONE_ENROLLED) {
+            return "NONE_ENROLLED";
+        }
+        if (resultCode == BiometricManager.BIOMETRIC_ERROR_SECURITY_UPDATE_REQUIRED) {
+            return "SECURITY_UPDATE_REQUIRED";
+        }
+        if (resultCode == BiometricManager.BIOMETRIC_ERROR_UNSUPPORTED) {
+            return "UNSUPPORTED";
+        }
+
+        return "UNKNOWN";
     }
 }

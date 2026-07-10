@@ -1,6 +1,6 @@
 {
   "name": "credstore",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "private": false,
   "description": "Secure Offline Credential Manager",
   "license": "MIT",
@@ -122,9 +122,6 @@
       "category": "public.app-category.utilities"
     }
   },
-  "optionalDependencies": {
-    "electron": "^43.1.0"
-  },
   "devDependencies": {
     "@capacitor/android": "^8.4.1",
     "@capacitor/cli": "^8.4.1",
@@ -150,6 +147,7 @@
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.0.0",
     "concurrently": "^10.0.3",
+    "electron": "^43.1.0",
     "electron-builder": "^26.15.3",
     "eslint": "^10.6.0",
     "lucide-react": "^1.24.0",
@@ -165,6 +163,8 @@
     "wait-on": "^9.0.10"
   },
   "dependencies": {
+    "@electron/get": "^5.0.0",
+    "extract-zip": "^2.0.1",
     "qrcode.react": "^4.2.0"
   }
 }

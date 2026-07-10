@@ -33,6 +33,7 @@ import {
   LEGACY_STORAGE_KEY,
   masterKeyMeetsPolicy,
   migrateLegacyCredential,
+  normalizeVaultData,
   parseVault,
   readStoredValue,
   removeStoredValue,
@@ -48,6 +49,7 @@ import {
   type ThemeName,
   type VaultData,
   type VaultRecord,
+  type LicenseRecord,
 } from "@/lib/secure-vault"
 import {
   Copy,
@@ -60,6 +62,7 @@ import {
   Lock,
   LogOut,
   Plus,
+  ShieldCheck,
   QrCode,
   ScanFace,
   Search,
@@ -69,15 +72,18 @@ import {
 } from "lucide-react"
 import { ResetCredStore } from "@/components/reset-button"
 
-const APP_VERSION = "1.0.7"
+const APP_VERSION = "1.0.8"
 const MAX_UNLOCK_DELAY_MS = 30000
 const MAX_FAILED_UNLOCKS = 10
+const FREE_SYNC_DEVICE_LIMIT = 5
+const SYNC_FRAME_CHUNK_SIZE = 850
 const LOCKOUT_STORAGE_KEY = "credstore_lockout_until"
 const CREDSTORE_DEEPLINK_SCHEME = "credstore"
 const RUNTIME_LOGO_PATH = "./logo.svg"
+const LICENSE_PUBLIC_KEY_STORAGE_KEY = "credstore_license_public_key"
 
 type CredStoreBiometricPlugin = {
-  isAvailable: () => Promise<{ available: boolean }>
+  isAvailable: () => Promise<BiometricAvailability>
   createSecret: (options: { slotId: string; secret: string }) => Promise<{ encrypted: string; iv: string }>
   getSecret: (options: { slotId: string; encrypted: string; iv: string }) => Promise<{ secret: string }>
 }
@@ -89,6 +95,112 @@ const THEMES: Record<ThemeName, string> = {
   emerald: "from-emerald-950 via-teal-900 to-slate-900",
   slate: "from-slate-950 via-slate-900 to-zinc-900",
   rose: "from-rose-950 via-fuchsia-950 to-indigo-950",
+}
+
+type BiometricAvailability = {
+  available: boolean
+  code?: string
+  message?: string
+}
+
+type CredStoreSyncFrame = {
+  scheme: typeof CREDSTORE_DEEPLINK_SCHEME
+  type: "credstore-sync-frame"
+  version: 2
+  sessionId: string
+  index: number
+  total: number
+  checksum: string
+  chunk: string
+}
+
+const defaultLicensePublicKey = {
+  kty: "EC",
+  crv: "P-256",
+  x: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+  y: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+  ext: true,
+} satisfies JsonWebKey
+
+function encodePayload(value: unknown) {
+  return btoa(String.fromCharCode(...Array.from(new TextEncoder().encode(JSON.stringify(value)))))
+}
+
+function decodePayload<T>(value: string): T {
+  return JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(value), (char) => char.charCodeAt(0)))) as T
+}
+
+function checksumText(value: string) {
+  let hash = 2166136261
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index)
+    hash = Math.imul(hash, 16777619)
+  }
+
+  return (hash >>> 0).toString(16).padStart(8, "0")
+}
+
+function createSyncFrames(vault: VaultRecord) {
+  const sessionId = createId()
+  const payload = encodePayload({
+    scheme: CREDSTORE_DEEPLINK_SCHEME,
+    type: "credstore-offline-sync",
+    version: 2,
+    createdAt: new Date().toISOString(),
+    vault,
+  })
+  const checksum = checksumText(payload)
+  const chunks = Array.from({ length: Math.ceil(payload.length / SYNC_FRAME_CHUNK_SIZE) }, (_, index) =>
+    payload.slice(index * SYNC_FRAME_CHUNK_SIZE, (index + 1) * SYNC_FRAME_CHUNK_SIZE),
+  )
+
+  return chunks.map((chunk, index) =>
+    encodePayload({
+      scheme: CREDSTORE_DEEPLINK_SCHEME,
+      type: "credstore-sync-frame",
+      version: 2,
+      sessionId,
+      index,
+      total: chunks.length,
+      checksum,
+      chunk,
+    } satisfies CredStoreSyncFrame),
+  )
+}
+
+function describeBiometricAvailability(result: BiometricAvailability) {
+  if (result.available) return "Strong biometric unlock is available."
+
+  switch (result.code) {
+    case "NO_HARDWARE":
+      return "This device does not report biometric hardware."
+    case "NONE_ENROLLED":
+      return "No strong fingerprint or face biometric is enrolled on this device."
+    case "UNAVAILABLE":
+      return "Biometric hardware is currently unavailable."
+    case "SECURITY_UPDATE_REQUIRED":
+      return "Android requires a security update before biometric unlock can be used."
+    case "UNSUPPORTED":
+      return "This Android version does not support the required strong biometric prompt."
+    case "PLUGIN_UNAVAILABLE":
+      return "Native biometric plugin is unavailable in this build."
+    default:
+      return result.message || "Biometric unlock is not available on this device."
+  }
+}
+
+function isSyncFrame(value: unknown): value is CredStoreSyncFrame {
+  const frame = value as Partial<CredStoreSyncFrame>
+  return (
+    frame.scheme === CREDSTORE_DEEPLINK_SCHEME &&
+    frame.type === "credstore-sync-frame" &&
+    frame.version === 2 &&
+    typeof frame.sessionId === "string" &&
+    Number.isInteger(frame.index) &&
+    Number.isInteger(frame.total) &&
+    typeof frame.checksum === "string" &&
+    typeof frame.chunk === "string"
+  )
 }
 
 function categoryIcon(category: CredentialCategory) {
@@ -204,36 +316,54 @@ export default function CredStore() {
   const [syncCode, setSyncCode] = useState("")
   const [syncMode, setSyncMode] = useState<"client" | "receiver">("client")
   const [syncPayload, setSyncPayload] = useState("")
+  const [syncFrames, setSyncFrames] = useState<string[]>([])
+  const [syncFrameIndex, setSyncFrameIndex] = useState(0)
   const [syncImportText, setSyncImportText] = useState("")
   const [syncMessage, setSyncMessage] = useState("")
+  const [vaultData, setVaultData] = useState<VaultData>(normalizeVaultData(null))
+  const [licenseToken, setLicenseToken] = useState("")
+  const [licenseMessage, setLicenseMessage] = useState("")
+  const [activeLicense, setActiveLicense] = useState<LicenseRecord | null>(null)
+  const [newProfileName, setNewProfileName] = useState("")
   const [unlockDelayUntil, setUnlockDelayUntil] = useState(0)
   const [failedUnlocks, setFailedUnlocks] = useState(0)
   const [biometricMessage, setBiometricMessage] = useState("")
   const [hasVault, setHasVault] = useState(false)
-  const [biometricAvailable, setBiometricAvailable] = useState(false)
+  const [biometricAvailability, setBiometricAvailability] = useState<BiometricAvailability>({ available: false })
   const lastActivityRef = useRef(Date.now())
   const scanVideoRef = useRef<HTMLVideoElement | null>(null)
+  const receivedSyncFramesRef = useRef<Record<string, CredStoreSyncFrame[]>>({})
 
   const themeClass = THEMES[theme]
   const unlockDelayRemaining = Math.max(0, unlockDelayUntil - Date.now())
   const isUnlockDelayed = unlockDelayRemaining > 0
+  const biometricAvailable = biometricAvailability.available
+  const maxSyncDevices = activeLicense?.maxDevices || FREE_SYNC_DEVICE_LIMIT
 
   const persistVault = useCallback(
-    async (nextCredentials: Credential[], nextRecord = vaultRecord, nextKey = vaultKey) => {
+    async (
+      nextCredentials: Credential[],
+      nextRecord = vaultRecord,
+      nextKey = vaultKey,
+      nextVaultData = vaultData,
+    ) => {
       if (!nextRecord || !nextKey) return false
 
       const key = await importVaultKey(nextKey)
+      const normalized = normalizeVaultData({ ...nextVaultData, credentials: nextCredentials })
       const updatedRecord: VaultRecord = {
         ...nextRecord,
-        payload: await encryptWithKey(JSON.stringify({ credentials: nextCredentials } satisfies VaultData), key),
+        payload: await encryptWithKey(JSON.stringify(normalized satisfies VaultData), key),
         updatedAt: new Date().toISOString(),
       }
 
       await writeStoredValue(VAULT_STORAGE_KEY, JSON.stringify(updatedRecord))
       setVaultRecord(updatedRecord)
+      setVaultData(normalized)
+      setActiveLicense(normalized.metadata?.license || null)
       return true
     },
-    [vaultKey, vaultRecord],
+    [vaultData, vaultKey, vaultRecord],
   )
 
   const lockVault = useCallback(() => {
@@ -242,6 +372,8 @@ export default function CredStore() {
     setCredentials([])
     setVaultRecord(null)
     setVaultKey(null)
+    setVaultData(normalizeVaultData(null))
+    setActiveLicense(null)
     setVisibleFields(new Set())
     setSearchTerm("")
     setSelectedCategory("all")
@@ -249,6 +381,10 @@ export default function CredStore() {
     setUnlockDelayUntil(0)
     setFailedUnlocks(0)
     setDraft(createDraft())
+    setSyncFrames([])
+    setSyncPayload("")
+    setSyncFrameIndex(0)
+    receivedSyncFramesRef.current = {}
   }, [])
 
   useEffect(() => {
@@ -264,9 +400,9 @@ export default function CredStore() {
 
       try {
         const result = await CredStoreBiometric.isAvailable()
-        setBiometricAvailable(result.available)
+        setBiometricAvailability(result)
       } catch {
-        setBiometricAvailable(false)
+        setBiometricAvailability({ available: false, code: "PLUGIN_UNAVAILABLE" })
       }
 
       setIsLocked(true)
@@ -325,11 +461,15 @@ export default function CredStore() {
             const unwrapped = await decryptWithPassword(slot.wrappedKey, masterPassword)
             const nextVaultKey = base64ToBytes(unwrapped)
             const vaultCryptoKey = await importVaultKey(nextVaultKey)
-            const decryptedVault = JSON.parse(await decryptWithKey(storedVault.payload, vaultCryptoKey)) as VaultData
+            const decryptedVault = normalizeVaultData(
+              JSON.parse(await decryptWithKey(storedVault.payload, vaultCryptoKey)) as VaultData,
+            )
 
             setVaultRecord(storedVault)
             setVaultKey(nextVaultKey)
-            setCredentials(decryptedVault.credentials || [])
+            setVaultData(decryptedVault)
+            setActiveLicense(decryptedVault.metadata?.license || null)
+            setCredentials(decryptedVault.credentials)
             setIsLocked(false)
             setMasterPassword("")
             setFailedUnlocks(0)
@@ -362,9 +502,10 @@ export default function CredStore() {
         : []
       const vaultCryptoKey = await importVaultKey(nextVaultKey)
       const createdAt = new Date().toISOString()
+      const nextVaultData = normalizeVaultData({ credentials: migratedCredentials })
       const nextRecord: VaultRecord = {
         version: 2,
-        payload: await encryptWithKey(JSON.stringify({ credentials: migratedCredentials } satisfies VaultData), vaultCryptoKey),
+        payload: await encryptWithKey(JSON.stringify(nextVaultData satisfies VaultData), vaultCryptoKey),
         keySlots: [await createPasswordSlotForKey(nextVaultKey, masterPassword, "Master password")],
         createdAt,
         updatedAt: createdAt,
@@ -375,6 +516,8 @@ export default function CredStore() {
       setHasVault(true)
       setVaultRecord(nextRecord)
       setVaultKey(nextVaultKey)
+      setVaultData(nextVaultData)
+      setActiveLicense(nextVaultData.metadata?.license || null)
       setCredentials(migratedCredentials)
       setIsLocked(false)
       setMasterPassword("")
@@ -402,11 +545,13 @@ export default function CredStore() {
 
   const unlockWithVaultKey = useCallback(async (storedVault: VaultRecord, nextVaultKey: Uint8Array) => {
     const vaultCryptoKey = await importVaultKey(nextVaultKey)
-    const decryptedVault = JSON.parse(await decryptWithKey(storedVault.payload, vaultCryptoKey)) as VaultData
+    const decryptedVault = normalizeVaultData(JSON.parse(await decryptWithKey(storedVault.payload, vaultCryptoKey)) as VaultData)
 
     setVaultRecord(storedVault)
     setVaultKey(nextVaultKey)
-    setCredentials(decryptedVault.credentials || [])
+    setVaultData(decryptedVault)
+    setActiveLicense(decryptedVault.metadata?.license || null)
+    setCredentials(decryptedVault.credentials)
     setIsLocked(false)
     setMasterPassword("")
     setFailedUnlocks(0)
@@ -418,7 +563,7 @@ export default function CredStore() {
   const handleBiometricUnlock = useCallback(
     async (type: "fingerprint" | "face") => {
       if (!biometricAvailable) {
-        setBiometricMessage("Biometric unlock is not available on this device.")
+        setBiometricMessage(describeBiometricAvailability(biometricAvailability))
         return
       }
 
@@ -444,7 +589,7 @@ export default function CredStore() {
         setBiometricMessage("Biometric unlock failed.")
       }
     },
-    [biometricAvailable, unlockWithVaultKey],
+    [biometricAvailability, biometricAvailable, unlockWithVaultKey],
   )
 
   const addField = useCallback(() => {
@@ -548,7 +693,7 @@ export default function CredStore() {
       const slotId = createId()
 
       if (!biometricAvailable) {
-        setBiometricMessage("Biometric unlock is not available on this device.")
+        setBiometricMessage(describeBiometricAvailability(biometricAvailability))
         return
       }
 
@@ -576,7 +721,7 @@ export default function CredStore() {
       setVaultRecord(nextRecord)
       await persistVault(credentials, nextRecord, vaultKey)
     },
-    [biometricAvailable, credentials, persistVault, vaultKey, vaultRecord],
+    [biometricAvailability, biometricAvailable, credentials, persistVault, vaultKey, vaultRecord],
   )
 
   const removeMasterKey = useCallback(
@@ -605,32 +750,68 @@ export default function CredStore() {
   const createSyncCode = useCallback(() => {
     if (!vaultRecord) return
 
-    const nonce = Array.from(crypto.getRandomValues(new Uint8Array(16)), (value) =>
-      value.toString(16).padStart(2, "0"),
-    ).join("")
-    const payload = btoa(
-      JSON.stringify({
-        scheme: CREDSTORE_DEEPLINK_SCHEME,
-        type: "credstore-offline-sync",
-        version: 1,
-        nonce,
-        createdAt: new Date().toISOString(),
-        vault: vaultRecord,
-      }),
+    const frames = createSyncFrames(vaultRecord)
+    setSyncFrames(frames)
+    setSyncFrameIndex(0)
+    setSyncPayload(frames[0] || "")
+    setSyncCode(frames.length > 1 ? `1/${frames.length}` : "1/1")
+    setSyncMessage(
+      frames.length > 1
+        ? `Generated ${frames.length} QR frames. Scan every frame on the receiver.`
+        : "One QR frame generated. Scan it on the receiver.",
     )
-
-    setSyncCode(nonce.slice(0, 8).toUpperCase())
-    setSyncPayload(payload)
-    setSyncMessage("One-time QR generated. The receiver can scan or paste this payload.")
   }, [vaultRecord])
 
   const importSyncPayload = useCallback(
     async (payload = syncImportText) => {
       try {
-        const parsed = JSON.parse(atob(payload.trim())) as {
+        const trimmed = payload.trim()
+        const parsed = decodePayload<
+          | CredStoreSyncFrame
+          | {
           scheme?: string
           type?: string
           vault?: VaultRecord
+        }
+        >(trimmed)
+
+        if (parsed.scheme !== CREDSTORE_DEEPLINK_SCHEME) throw new Error("Invalid scheme")
+
+        if (isSyncFrame(parsed)) {
+          const frames = receivedSyncFramesRef.current[parsed.sessionId] || []
+          frames[parsed.index] = parsed
+          receivedSyncFramesRef.current[parsed.sessionId] = frames
+
+          const receivedCount = frames.filter(Boolean).length
+          if (receivedCount < parsed.total) {
+            setSyncMessage(`Received frame ${parsed.index + 1}/${parsed.total}. ${parsed.total - receivedCount} remaining.`)
+            setSyncImportText("")
+            return
+          }
+
+          const ordered = frames.slice(0, parsed.total)
+          const assembled = ordered.map((frame) => frame?.chunk || "").join("")
+          if (checksumText(assembled) !== parsed.checksum) throw new Error("Checksum mismatch")
+
+          const fullPayload = decodePayload<{
+            scheme?: string
+            type?: string
+            vault?: VaultRecord
+          }>(assembled)
+
+          if (
+            fullPayload.scheme !== CREDSTORE_DEEPLINK_SCHEME ||
+            fullPayload.type !== "credstore-offline-sync" ||
+            !parseVault(JSON.stringify(fullPayload.vault))
+          ) {
+            throw new Error("Invalid sync payload")
+          }
+
+          await writeStoredValue(VAULT_STORAGE_KEY, JSON.stringify(fullPayload.vault))
+          setSyncMessage("All QR frames imported. Locking now; unlock with one of the synced master keys.")
+          setSyncImportText("")
+          lockVault()
+          return
         }
 
         if (
@@ -643,9 +824,10 @@ export default function CredStore() {
 
         await writeStoredValue(VAULT_STORAGE_KEY, JSON.stringify(parsed.vault))
         setSyncMessage("Vault imported. Locking now; unlock with one of the synced master keys.")
+        setSyncImportText("")
         lockVault()
       } catch {
-        setSyncMessage("Invalid or unreadable sync QR payload.")
+        setSyncMessage("Invalid, incomplete, or unreadable sync QR frame.")
       }
     },
     [lockVault, syncImportText],
@@ -694,6 +876,91 @@ export default function CredStore() {
     }
   }, [importSyncPayload])
 
+  const showSyncFrame = useCallback(
+    (nextIndex: number) => {
+      if (!syncFrames.length) return
+      const boundedIndex = Math.min(Math.max(nextIndex, 0), syncFrames.length - 1)
+      setSyncFrameIndex(boundedIndex)
+      setSyncPayload(syncFrames[boundedIndex])
+      setSyncCode(`${boundedIndex + 1}/${syncFrames.length}`)
+    },
+    [syncFrames],
+  )
+
+  const verifyLicenseToken = useCallback(async (token: string): Promise<LicenseRecord> => {
+    const [payloadPart, signaturePart] = token.trim().split(".")
+    if (!payloadPart || !signaturePart) throw new Error("License must be payload.signature")
+
+    const publicKeyText = (await readStoredValue(LICENSE_PUBLIC_KEY_STORAGE_KEY)) || JSON.stringify(defaultLicensePublicKey)
+    const publicKey = await crypto.subtle.importKey(
+      "jwk",
+      JSON.parse(publicKeyText) as JsonWebKey,
+      { name: "ECDSA", namedCurve: "P-256" },
+      false,
+      ["verify"],
+    )
+    const payloadBytes = new TextEncoder().encode(payloadPart)
+    const signature = base64ToBytes(signaturePart)
+    const verified = await crypto.subtle.verify({ name: "ECDSA", hash: "SHA-256" }, publicKey, signature, payloadBytes)
+    if (!verified) throw new Error("License signature is invalid")
+
+    const payload = decodePayload<Omit<LicenseRecord, "token">>(payloadPart)
+    if (payload.expiresAt && Date.parse(payload.expiresAt) < Date.now()) {
+      throw new Error("License is expired")
+    }
+
+    return {
+      ...payload,
+      token,
+    }
+  }, [])
+
+  const applyLicense = useCallback(async () => {
+    if (!vaultRecord || !vaultKey) return
+
+    try {
+      const license = await verifyLicenseToken(licenseToken)
+      const nextVaultData = normalizeVaultData({
+        ...vaultData,
+        metadata: {
+          ...(vaultData.metadata || normalizeVaultData(null).metadata!),
+          license,
+        },
+      })
+
+      await persistVault(credentials, vaultRecord, vaultKey, nextVaultData)
+      setActiveLicense(license)
+      setLicenseToken("")
+      setLicenseMessage(`Enterprise license enabled for ${license.company}.`)
+    } catch (error) {
+      setLicenseMessage(error instanceof Error ? error.message : "License validation failed.")
+    }
+  }, [credentials, licenseToken, persistVault, vaultData, vaultKey, vaultRecord, verifyLicenseToken])
+
+  const addProfile = useCallback(async () => {
+    if (!vaultRecord || !vaultKey || !newProfileName.trim()) return
+
+    const currentData = normalizeVaultData(vaultData)
+    const adminRole = currentData.roles?.find((role) => role.canManageProfiles) || currentData.roles?.[0]
+    if (!adminRole) return
+
+    const nextVaultData = normalizeVaultData({
+      ...currentData,
+      profiles: [
+        ...(currentData.profiles || []),
+        {
+          id: createId(),
+          name: sanitizeText(newProfileName, 80).trim(),
+          roleId: adminRole.id,
+          createdAt: new Date().toISOString(),
+        },
+      ],
+    })
+
+    await persistVault(credentials, vaultRecord, vaultKey, nextVaultData)
+    setNewProfileName("")
+  }, [credentials, newProfileName, persistVault, vaultData, vaultKey, vaultRecord])
+
   const toggleFieldVisibility = useCallback((fieldId: string) => {
     setVisibleFields((previous) => {
       const next = new Set(previous)
@@ -720,12 +987,15 @@ export default function CredStore() {
 
   if (isLocked) {
     return (
-      <main className={`min-h-dvh bg-gradient-to-br ${themeClass} flex items-center justify-center p-4`}>
+      <main
+        className={`min-h-dvh bg-gradient-to-br ${themeClass} flex items-center justify-center p-4`}
+        style={{ paddingTop: "max(1rem, env(safe-area-inset-top))", paddingBottom: "max(1rem, env(safe-area-inset-bottom))" }}
+      >
         <Card className="w-full max-w-sm border-white/10 bg-white/5 shadow-lg">
           <CardHeader className="pb-4 text-center">
             <LogoMark className="mx-auto mb-3 h-12 w-12" />
             <CardTitle className="text-xl font-bold text-white">CredStore</CardTitle>
-            <CardDescription className="text-sm text-gray-300">Secure Credential Manager - v{APP_VERSION}</CardDescription>
+            <CardDescription className="text-sm text-gray-300">v{APP_VERSION}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="space-y-2">
@@ -781,7 +1051,7 @@ export default function CredStore() {
                 Face
               </Button>
             </div>
-            <p className="text-center text-xs text-gray-400">Biometric unlock needs native keychain support.</p>
+            <p className="text-center text-xs text-gray-400">{describeBiometricAvailability(biometricAvailability)}</p>
           </CardContent>
         </Card>
       </main>
@@ -789,19 +1059,22 @@ export default function CredStore() {
   }
 
   return (
-    <main className={`min-h-dvh bg-gradient-to-br ${themeClass}`}>
-      <div className="mx-auto max-w-4xl space-y-4 p-3">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
+    <main
+      className={`min-h-dvh bg-gradient-to-br ${themeClass}`}
+      style={{ paddingTop: "max(0.75rem, env(safe-area-inset-top))", paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
+    >
+      <div className="mx-auto max-w-4xl space-y-4 px-3 pb-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0 flex items-center gap-2">
             <LogoMark className="h-8 w-8" />
-            <div>
-              <h1 className="text-lg font-bold text-white">CredStore</h1>
+            <div className="min-w-0">
+              <h1 className="truncate text-lg font-bold text-white">CredStore</h1>
               <p className="text-xs text-gray-300">
                 {credentials.length} credentials - v{APP_VERSION}
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex shrink-0 items-center gap-1">
             <Dialog open={isSyncOpen} onOpenChange={setIsSyncOpen}>
               <DialogTrigger asChild>
                 <Button variant="outline" size="sm" className="border-white/20 bg-white/5 px-2 py-1 text-xs text-white hover:bg-white/10">
@@ -856,12 +1129,37 @@ export default function CredStore() {
                         )}
                         <p className="mt-2 font-mono text-xs tracking-[0.25em]">{syncCode || "--------"}</p>
                       </div>
+                      {syncFrames.length > 1 && (
+                        <div className="grid grid-cols-2 gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => showSyncFrame(syncFrameIndex - 1)}
+                            disabled={syncFrameIndex === 0}
+                            className="border-white/20 bg-white/5 text-xs text-white hover:bg-white/10"
+                          >
+                            Previous
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => showSyncFrame(syncFrameIndex + 1)}
+                            disabled={syncFrameIndex >= syncFrames.length - 1}
+                            className="border-white/20 bg-white/5 text-xs text-white hover:bg-white/10"
+                          >
+                            Next
+                          </Button>
+                        </div>
+                      )}
                       <Button
                         onClick={createSyncCode}
                         className="w-full bg-gradient-to-r from-purple-500 to-blue-500 text-sm"
                       >
                         Generate One-Time QR
                       </Button>
+                      <p className="text-xs text-gray-300">
+                        Free edition sync limit: {vaultData.metadata?.syncedDevices.length || 1}/{maxSyncDevices} devices.
+                      </p>
                     </div>
                   ) : (
                     <div className="space-y-3">
@@ -983,6 +1281,73 @@ export default function CredStore() {
                         className="border-white/20 bg-white/5 text-xs text-white hover:bg-white/10"
                       >
                         Face
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="space-y-2 border-t border-white/10 pt-4">
+                    <div className="flex items-center justify-between gap-2">
+                      <Label className="text-xs">Enterprise License</Label>
+                      <Badge className="bg-white/10 text-gray-200">
+                        {activeLicense ? activeLicense.plan : "Community"}
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-gray-400">
+                      Community sync allows {FREE_SYNC_DEVICE_LIMIT} devices. A signed enterprise license unlocks higher offline limits.
+                    </p>
+                    {activeLicense && (
+                      <p className="text-xs text-gray-300">
+                        {activeLicense.company}: up to {activeLicense.maxDevices} devices and {activeLicense.maxUsers} users.
+                      </p>
+                    )}
+                    <Textarea
+                      value={licenseToken}
+                      onChange={(event) => setLicenseToken(event.target.value)}
+                      className="min-h-[72px] border-white/20 bg-white/5 text-xs text-white"
+                      placeholder="Paste signed enterprise license token"
+                    />
+                    <Button
+                      type="button"
+                      onClick={applyLicense}
+                      disabled={!licenseToken.trim()}
+                      className="w-full bg-gradient-to-r from-purple-500 to-blue-500 text-xs"
+                    >
+                      <ShieldCheck className="mr-1 h-3 w-3" />
+                      Validate Offline License
+                    </Button>
+                    {licenseMessage && <p className="text-xs text-gray-300">{licenseMessage}</p>}
+                  </div>
+                  <div className="space-y-2 border-t border-white/10 pt-4">
+                    <Label className="text-xs">Employee Profiles</Label>
+                    <p className="text-xs text-gray-400">
+                      Profiles are stored inside the encrypted vault. Visibility rules use the profile/role metadata foundation for enterprise ACLs.
+                    </p>
+                    <div className="space-y-2">
+                      {vaultData.profiles?.map((profile) => (
+                        <div
+                          key={profile.id}
+                          className="flex items-center justify-between rounded-md border border-white/10 bg-white/5 px-3 py-2 text-xs"
+                        >
+                          <span>{profile.name}</span>
+                          <Badge className="bg-white/10 text-gray-300">
+                            {vaultData.roles?.find((role) => role.id === profile.roleId)?.name || "Role"}
+                          </Badge>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="grid grid-cols-[1fr_auto] gap-2">
+                      <Input
+                        value={newProfileName}
+                        onChange={(event) => setNewProfileName(event.target.value)}
+                        className="border-white/20 bg-white/5 text-sm text-white"
+                        placeholder="Employee profile name"
+                      />
+                      <Button
+                        type="button"
+                        onClick={addProfile}
+                        disabled={!newProfileName.trim()}
+                        className="bg-gradient-to-r from-purple-500 to-blue-500 text-xs"
+                      >
+                        Add
                       </Button>
                     </div>
                   </div>

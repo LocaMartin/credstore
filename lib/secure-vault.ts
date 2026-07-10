@@ -1,6 +1,7 @@
 export const VAULT_STORAGE_KEY = "credstore_vault_v2"
 export const LEGACY_STORAGE_KEY = "credstore_data"
 export const THEME_STORAGE_KEY = "credstore_theme"
+export const LICENSE_STORAGE_KEY = "credstore_license"
 
 const KDF_ITERATIONS = 600000
 const VAULT_CONTEXT = "CredStore vault v2"
@@ -57,6 +58,49 @@ export interface VaultRecord {
 
 export interface VaultData {
   credentials: Credential[]
+  metadata?: VaultMetadata
+  profiles?: EnterpriseProfile[]
+  roles?: EnterpriseRole[]
+}
+
+export interface VaultMetadata {
+  deviceId: string
+  syncedDevices: SyncedDevice[]
+  license?: LicenseRecord
+}
+
+export interface SyncedDevice {
+  id: string
+  label: string
+  firstSeenAt: string
+  lastSeenAt: string
+}
+
+export interface LicenseRecord {
+  token: string
+  plan: "community" | "enterprise"
+  company: string
+  maxDevices: number
+  maxUsers: number
+  issuedAt: string
+  expiresAt?: string
+}
+
+export interface EnterpriseProfile {
+  id: string
+  name: string
+  roleId: string
+  profileKeyPublic?: JsonWebKey
+  wrappedProfileKey?: EncryptedPayload
+  createdAt: string
+}
+
+export interface EnterpriseRole {
+  id: string
+  name: string
+  canManageProfiles: boolean
+  canManageLicenses: boolean
+  parentRoleId?: string
 }
 
 export interface CredentialDraft {
@@ -94,6 +138,58 @@ export const bytesToBase64 = (bytes: Uint8Array) => btoa(String.fromCharCode(...
 export const base64ToBytes = (value: string) => Uint8Array.from(atob(value), (char) => char.charCodeAt(0))
 
 export const generateVaultKey = () => crypto.getRandomValues(new Uint8Array(32))
+
+export const createDefaultVaultMetadata = (): VaultMetadata => {
+  const now = new Date().toISOString()
+
+  return {
+    deviceId: createId(),
+    syncedDevices: [
+      {
+        id: createId(),
+        label: "This device",
+        firstSeenAt: now,
+        lastSeenAt: now,
+      },
+    ],
+  }
+}
+
+export const createDefaultEnterpriseState = () => {
+  const adminRoleId = createId()
+  const adminProfileId = createId()
+  const now = new Date().toISOString()
+
+  return {
+    roles: [
+      {
+        id: adminRoleId,
+        name: "Admin",
+        canManageProfiles: true,
+        canManageLicenses: true,
+      },
+    ] satisfies EnterpriseRole[],
+    profiles: [
+      {
+        id: adminProfileId,
+        name: "Admin",
+        roleId: adminRoleId,
+        createdAt: now,
+      },
+    ] satisfies EnterpriseProfile[],
+  }
+}
+
+export const normalizeVaultData = (data: Partial<VaultData> | null | undefined): VaultData => {
+  const enterprise = createDefaultEnterpriseState()
+
+  return {
+    credentials: data?.credentials || [],
+    metadata: data?.metadata || createDefaultVaultMetadata(),
+    profiles: data?.profiles?.length ? data.profiles : enterprise.profiles,
+    roles: data?.roles?.length ? data.roles : enterprise.roles,
+  }
+}
 
 export const createDraft = (): CredentialDraft => ({
   title: "",

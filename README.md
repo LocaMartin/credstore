@@ -4,7 +4,7 @@
   <img src="./.res/text.svg" alt="CredStore">
 </div>
 
-<p align="center"><b>1.0.7</b></p>
+<p align="center"><b>1.0.8</b></p>
 
 CredStore is a strictly offline personal credential manager for desktop, web, and Android.
 
@@ -30,7 +30,8 @@ npm install -g credstore
 credstore
 ```
 
-On Linux, the desktop launcher is installed automatically during package installation. You should not need to run `credstore --install-desktop` manually.
+On Linux, the desktop launcher is installed automatically during package installation when npm allows install scripts.
+If install scripts are blocked, `credstore` still launches by caching Electron in the current user's cache directory.
 
 ### GitHub
 
@@ -68,7 +69,9 @@ https://credstore.en.uptodown.com/android
 - Website, API, database, and other categories.
 - Search and category filtering.
 - Post-login settings with multiple themes and master-key management.
-- Offline Sync button with client/receiver modes, one-time QR generation, camera scanning, and paste fallback.
+- Offline Sync button with client/receiver modes, chunked one-time QR generation, camera scanning, and paste fallback.
+- Community sync for up to 5 devices, with signed offline enterprise licenses for larger teams.
+- Employee profile and role metadata foundation for enterprise visibility controls.
 - Android immersive full-screen mode to remove the black bezel/status area.
 - Android `FLAG_SECURE`, disabled app backup, no Internet permission, and hardcoded `credstore` deep-link scheme.
 - Electron network request blocking, permission denial, renderer sandboxing, and content protection.
@@ -109,6 +112,18 @@ Offline brute force cannot be made impossible if an attacker has the encrypted v
 - The app uses a hardcoded `credstore` deep-link scheme.
 
 Development builds may use `localhost` for Next.js and Electron dev mode.
+
+## Enterprise & Team Use
+
+CredStore keeps the community edition public and open source. Enterprise users can buy a signed offline corporate license
+for higher local sync limits, team profile management, and future enterprise controls.
+
+- Community edition: free local vault use and sync for up to 5 devices.
+- Enterprise edition: signed offline license token with higher device/user limits.
+- License validation happens locally in the app with a public verification key.
+- License generation must happen outside this public repository with a private signing key. Do not put the signing key in
+  GitHub Pages JavaScript.
+- Corporate deployments can receive a lifetime right-to-use certificate and direct support terms.
 
 ## Encryption Process
 

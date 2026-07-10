@@ -2,6 +2,24 @@
 
 All notable changes to CredStore will be documented in this file.
 
+## [1.0.8] - 2026-07-10
+
+### Fixed
+
+- Fixed the npm global launcher so blocked Electron install scripts do not make `credstore` write into `/usr/local`.
+- Fixed Android safe-area spacing so the header does not overlap the status bar on fullscreen devices.
+- Replaced single-payload QR sync with chunked QR frames and checksum validation.
+- Improved Android biometric diagnostics for missing hardware, missing enrollment, unsupported devices, and unavailable native builds.
+- Updated Android release workflow behavior so unsigned debug APKs are clearly test-only and signed release artifacts are used for production.
+- Replaced the login subtitle with `v1.0.8`.
+
+### Added
+
+- Added offline enterprise license storage and local signed-token validation foundation.
+- Added community sync limit metadata for 5 free devices and enterprise license limits for larger deployments.
+- Added encrypted-vault profile and role metadata foundation for employee/admin controls.
+- Added README guidance for open-core Enterprise & Team Use.
+
 ## [1.0.7] - 2026-07-10
 
 ### Fixed
