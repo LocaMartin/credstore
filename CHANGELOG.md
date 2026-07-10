@@ -2,6 +2,19 @@
 
 All notable changes to CredStore will be documented in this file.
 
+## [1.0.11] - 2026-07-11
+
+### Fixed
+
+- Added a root GitHub Pages license portal so `https://locamartin.github.io/credstore/` renders the key generator instead of the repository README.
+- Added packaged Electron integrity checks that verify shipped app files against a generated SHA-256 manifest at startup.
+- Rotated the offline license public key and refreshed bundled test/trial license tokens; the matching private JWK must be stored only as a Cloudflare Worker secret.
+
+### Security
+
+- Added account-bound Worker token support for the Dashboard-managed license signer flow.
+- Kept Cloudflare Worker backend source out of the GitHub repository while preserving the static portal frontend.
+
 ## [1.0.10] - 2026-07-11
 
 ### Changed

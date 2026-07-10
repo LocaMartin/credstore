@@ -1,6 +1,6 @@
 {
   "name": "credstore",
-  "version": "1.0.10",
+  "version": "1.0.11",
   "private": false,
   "description": "Secure Offline Credential Manager",
   "license": "MIT",
@@ -43,7 +43,7 @@
     "test:security": "node scripts/security-smoke-test.mjs",
     "dist:clean": "npm run clean && npm run dist-linux",
     "prepack": "npm run export",
-    "export": "next build --webpack",
+    "export": "next build --webpack && node scripts/generate-integrity-manifest.mjs",
     "electron": "electron .",
     "electron-dev": "concurrently \"npm run dev\" \"wait-on http://localhost:3000 && electron .\"",
     "build-electron": "npm run export && electron-builder",

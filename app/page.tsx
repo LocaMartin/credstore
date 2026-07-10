@@ -74,7 +74,7 @@ import {
 } from "lucide-react"
 import { ResetCredStore } from "@/components/reset-button"
 
-const APP_VERSION = "1.0.10"
+const APP_VERSION = "1.0.11"
 const MAX_UNLOCK_DELAY_MS = 30000
 const MAX_FAILED_UNLOCKS = 10
 const FREE_SYNC_DEVICE_LIMIT = 5
@@ -129,28 +129,28 @@ declare global {
 
 const defaultLicensePublicKey = {
   key_ops: ["verify"],
-  kty: "EC",
-  crv: "P-256",
-  x: "lmOPXYcN2okOoycLnZw5k2psqE2EIMIOyCaBGRuTrKs",
-  y: "xGNS6EwTQ1DsQ1x_AFbktdYgyyUgRMoJ_V31G58Fr1A",
   ext: true,
+  kty: "EC",
+  x: "v4mRarDgJXwTvEAFiLWmMSBK1N8T3vPyYDi31BmpFv4",
+  y: "7un9ScsUlv78MVh6-0IHdR2KnMC8Nc3b38wz-4cc41M",
+  crv: "P-256",
 } satisfies JsonWebKey
 
 const TEST_LICENSE_TOKEN =
   "eyJwbGFuIjoiZW50ZXJwcmlzZSIsImtpbmQiOiJ0ZXN0IiwibGljZW5zZUlkIjoiY3JlZHN0b3JlLXRlc3QtMjAyNiIs" +
   "ImNvbXBhbnkiOiJMb2NhIE1hcnRpbiBUZXN0IExhYiIsImJ1eWVyRW1haWwiOiJsb2NhYm95ZmZAZ21haWwuY29tIiwibW" +
-  "F4RGV2aWNlcyI6NTAsIm1heFVzZXJzIjo1MCwiaXNzdWVkQXQiOiIyMDI2LTA3LTEwVDE5OjIxOjU2LjY1MVoiLCJmZWF0" +
+  "F4RGV2aWNlcyI6NTAsIm1heFVzZXJzIjo1MCwiaXNzdWVkQXQiOiIyMDI2LTA3LTEwVDIyOjE1OjEzLjcwOFoiLCJmZWF0" +
   "dXJlcyI6WyJwcmVtaXVtLXN5bmMiLCJlbXBsb3llZS1wcm9maWxlcyIsImFkbWluLWNvbnRyb2xzIiwidmlzaWJpbGl0eS" +
-  "1jb250cm9scyIsImN1c3RvbWl6YXRpb24tZmVlZGJhY2siXX0.a32epznfH08P033pr54jW4RsbD3qZWDW14kyc-1YIWvI" +
-  "fvi33EKN61xEilTgO7ybEIPuA3UbhjsV1ZZjSYLrrA"
+  "1jb250cm9scyIsImN1c3RvbWl6YXRpb24tZmVlZGJhY2siXX0.ejykd2500pPeUNBkP1KNXmDfvbY1fKIQjslz_v1rg2sm" +
+  "3-tekIVAVmdqqZ-02DyhmpcP1hmk4X6VZMP6MQsSkw"
 
 const TRIAL_LICENSE_TOKEN =
   "eyJwbGFuIjoiZW50ZXJwcmlzZSIsImtpbmQiOiJ0cmlhbCIsImxpY2Vuc2VJZCI6ImNyZWRzdG9yZS10cmlhbC01LWRheS" +
   "1kZW1vIiwiY29tcGFueSI6IjUgRGF5IFRyaWFsIERlbW8iLCJidXllckVtYWlsIjoidHJpYWxAZXhhbXBsZS5jb20iLCJt" +
-  "YXhEZXZpY2VzIjo1MCwibWF4VXNlcnMiOjUwLCJpc3N1ZWRBdCI6IjIwMjYtMDctMTBUMTk6MjE6NTYuNjUxWiIsImV4cG" +
-  "lyZXNBdCI6IjIwMjYtMDctMTVUMTk6MjE6NTYuNjU0WiIsImZlYXR1cmVzIjpbInByZW1pdW0tc3luYyIsImVtcGxveWVl" +
+  "YXhEZXZpY2VzIjo1MCwibWF4VXNlcnMiOjUwLCJpc3N1ZWRBdCI6IjIwMjYtMDctMTBUMjI6MTU6MTMuNzA4WiIsImV4cG" +
+  "lyZXNBdCI6IjIwMjYtMDctMTVUMjI6MTU6MTMuNzA4WiIsImZlYXR1cmVzIjpbInByZW1pdW0tc3luYyIsImVtcGxveWVl" +
   "LXByb2ZpbGVzIiwiYWRtaW4tY29udHJvbHMiLCJ2aXNpYmlsaXR5LWNvbnRyb2xzIiwiY3VzdG9taXphdGlvbi1mZWVkYm" +
-  "FjayJdfQ.BDwDklRgIKBxOn1vpNKhQxHetroEWirMilzA2Pu8mPBHQ6yyHo6cww5p3V47702JLGv49IRlWq_MZi2BU04tDg"
+  "FjayJdfQ.t1PVi-OxfYkIqEudapZjnO7Lhwpt_ZZWs3Kn4Tg5WVVpBWSY1JXv2r6-lh7oqF7GVhyp20MHu7I-Srz4KW4QPA"
 
 function encodePayload(value: unknown) {
   return bytesToBase64Url(new TextEncoder().encode(JSON.stringify(value)))

@@ -1,6 +1,7 @@
 const { app, BrowserWindow, Menu, ipcMain, session } = require("electron")
 const path = require("path")
 const fs = require("fs")
+const crypto = require("crypto")
 const isDev = process.env.NODE_ENV === "development"
 
 // Enable live reload for Electron in development
@@ -153,6 +154,7 @@ function getIconPath() {
 }
 
 app.whenReady().then(() => {
+  verifyApplicationIntegrity()
   installOfflineGuards()
   createWindow()
 
@@ -162,6 +164,41 @@ app.whenReady().then(() => {
     }
   })
 })
+
+function verifyApplicationIntegrity() {
+  if (isDev || !app.isPackaged || process.env.CREDSTORE_SKIP_INTEGRITY_CHECK === "1") return
+
+  const manifestPath = path.join(__dirname, "integrity-manifest.json")
+  if (!fs.existsSync(manifestPath)) {
+    failIntegrityCheck("integrity manifest is missing")
+  }
+
+  let manifest
+  try {
+    manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"))
+  } catch {
+    failIntegrityCheck("integrity manifest is unreadable")
+  }
+
+  if (manifest.algorithm !== "sha256" || !manifest.files || typeof manifest.files !== "object") {
+    failIntegrityCheck("integrity manifest has an invalid format")
+  }
+
+  const appRoot = path.resolve(__dirname, "..")
+  for (const [relativePath, expectedHash] of Object.entries(manifest.files)) {
+    const absolutePath = path.resolve(appRoot, relativePath)
+    if (!absolutePath.startsWith(appRoot)) failIntegrityCheck(`invalid manifest path: ${relativePath}`)
+    if (!fs.existsSync(absolutePath)) failIntegrityCheck(`protected file is missing: ${relativePath}`)
+
+    const actualHash = crypto.createHash("sha256").update(fs.readFileSync(absolutePath)).digest("hex")
+    if (actualHash !== expectedHash) failIntegrityCheck(`protected file was modified: ${relativePath}`)
+  }
+}
+
+function failIntegrityCheck(reason) {
+  console.error(`CredStore integrity check failed: ${reason}`)
+  app.exit(1)
+}
 
 function installOfflineGuards() {
   session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => {
