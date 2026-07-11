@@ -6,26 +6,39 @@
     <title>CredStore Pro License</title>
     <meta
       name="description"
-      content="Generate signed offline CredStore Pro and Enterprise license tokens."
+      content="Generate signed offline CredStore Pro and Enterprise license tokens, submit support requests, and manage bug disclosure certificates."
     />
     <link rel="icon" href="logo.svg" />
     <link rel="stylesheet" href="web/license-portal/css/index.css" />
+    <script src="https://accounts.google.com/gsi/client" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js" defer></script>
   </head>
   <body>
     <main>
-      <header>
-        <div class="brand">
-          <img src="logo.svg" alt="CredStore" />
-          <strong>CredStore Pro</strong>
+      <header class="hero">
+        <nav class="topbar">
+          <div class="brand">
+            <img src="logo.svg" alt="CredStore" />
+            <strong>CredStore Pro</strong>
+          </div>
+          <div class="top-actions">
+            <a href="#support">Support</a>
+            <a href="#bug-program">Bug Program</a>
+            <a href="#admin">Admin</a>
+          </div>
+        </nav>
+        <div class="hero-copy">
+          <p class="eyebrow">Offline Ed25519 Licensing</p>
+          <h1>Offline Enterprise License Generator</h1>
+          <p class="muted">
+            Buy a lifetime license, request a 5-day trial, submit support issues, and manage disclosure certificates.
+            License validation still happens locally inside CredStore.
+          </p>
         </div>
-        <h1>Offline Enterprise License Generator</h1>
-        <p class="muted">
-          Buy a lifetime license, request a 5-day trial, or contact support. License validation happens locally inside
-          CredStore.
-        </p>
       </header>
 
-      <section class="grid">
+      <section class="workspace">
         <form id="license-form" class="panel stack">
           <h2>Generate License</h2>
           <label>
@@ -48,7 +61,7 @@
             <input
               name="accountIdentity"
               required
-              maxlength="160"
+              maxlength="180"
               placeholder="Paste from CredStore Settings > Enterprise License"
             />
           </label>
@@ -78,17 +91,13 @@
             <input name="paymentReference" maxlength="180" placeholder="UPI/PayPal/Card transaction ID" />
           </label>
           <button type="submit">Generate Signed License</button>
-          <p class="muted">
-            Card checkout needs your own Stripe/Razorpay/PayPal Business link configured in the page or Worker
-            environment. Do not put private signing keys in this static page.
-          </p>
-          <p class="muted">
-            Paid licenses should be bound to the account identity shown inside CredStore. A copied screenshot or token
-            will fail in a different vault because the identity will not match.
+          <p class="muted small">
+            Paid licenses are bound to the account identity shown inside CredStore. A copied screenshot or token fails in
+            a different vault because the identity will not match.
           </p>
         </form>
 
-        <section class="panel stack">
+        <section class="panel stack generated">
           <h2>Generated Key</h2>
           <div id="qr"></div>
           <pre id="license-output">No license generated yet.</pre>
@@ -99,42 +108,237 @@
           <p id="license-status" class="muted"></p>
         </section>
 
-        <form id="contact-form" class="panel stack">
-          <h2>Contact / Feedback</h2>
-          <label>
-            Name
-            <input name="name" required maxlength="120" />
-          </label>
-          <label>
-            Email
-            <input name="email" type="email" required maxlength="160" />
-          </label>
-          <label>
-            Message
-            <textarea name="message" required maxlength="4000" placeholder="Ask anything about CredStore Pro."></textarea>
-          </label>
-          <button type="submit">Send Message</button>
-          <p id="contact-status" class="muted"></p>
-        </form>
+        <aside id="support" class="right-rail">
+          <form id="contact-form" class="panel stack">
+            <h2>Feedback</h2>
+            <label>
+              Name
+              <input name="name" required maxlength="120" />
+            </label>
+            <label>
+              Email
+              <input name="email" type="email" required maxlength="160" />
+            </label>
+            <label>
+              Message
+              <textarea name="message" required maxlength="4000" placeholder="Ask anything about CredStore Pro."></textarea>
+            </label>
+            <button type="submit">Send Feedback</button>
+            <p id="contact-status" class="muted"></p>
+          </form>
 
-        <section class="panel stack">
-          <h2>Anti-piracy model</h2>
+          <form id="complaint-form" class="panel stack">
+            <h2>Payment Complaint</h2>
+            <label>
+              Email
+              <input name="email" type="email" required maxlength="160" />
+            </label>
+            <label>
+              Transaction ID
+              <input name="transactionId" required maxlength="180" placeholder="UPI/PayPal/Card transaction ID" />
+            </label>
+            <label>
+              Screenshot
+              <input name="screenshot" type="file" accept="image/png,image/jpeg,image/webp" />
+            </label>
+            <label>
+              Issue
+              <textarea name="message" required maxlength="4000" placeholder="Payment completed but key was not received."></textarea>
+            </label>
+            <button type="submit">Submit Complaint</button>
+            <p id="complaint-status" class="muted"></p>
+          </form>
+        </aside>
+      </section>
+
+      <section id="bug-program" class="section-grid">
+        <article class="panel stack">
+          <h2>Bug Disclosure Program</h2>
           <p class="muted">
-            Offline apps cannot completely prevent someone from copying a license token. CredStore reduces abuse by using
-            signed tokens, account identity binding, local device limits, optional company/buyer metadata, and no online
-            activation tracking.
+            Submit security bugs, sync bugs, payment problems, or platform issues. Accepted reports can receive a
+            CredStore certificate and hall-of-fame listing.
           </p>
-        </section>
+          <form id="bug-form" class="stack">
+            <label>
+              Hunter name
+              <input name="hunterName" required maxlength="120" />
+            </label>
+            <label>
+              Email
+              <input name="email" type="email" required maxlength="160" />
+            </label>
+            <label>
+              Severity
+              <select name="severity">
+                <option>Critical</option>
+                <option>High</option>
+                <option>Medium</option>
+                <option>Low</option>
+                <option>Informational</option>
+              </select>
+            </label>
+            <label>
+              Bug title
+              <input name="title" required maxlength="180" />
+            </label>
+            <label>
+              Details
+              <textarea name="message" required maxlength="6000"></textarea>
+            </label>
+            <button type="submit">Submit Bug Report</button>
+            <p id="bug-status" class="muted"></p>
+          </form>
+        </article>
+
+        <article class="panel stack">
+          <h2>Hall of Fame</h2>
+          <div id="hall-public" class="list empty">No public entries yet.</div>
+        </article>
+      </section>
+
+      <section id="admin" class="admin panel stack">
+        <div class="admin-head">
+          <div>
+            <p class="eyebrow">Developer Console</p>
+            <h2>Admin Panel</h2>
+          </div>
+          <div class="admin-login">
+            <div id="google-login"></div>
+            <button id="admin-refresh" class="secondary" type="button" disabled>Refresh</button>
+          </div>
+        </div>
+
+        <p class="muted small">
+          Admin login uses Google Identity Services. The Worker verifies the ID token and checks the Cloudflare
+          <code>ADMIN_EMAILS</code> secret before returning data.
+        </p>
+
+        <div id="admin-status" class="muted">Sign in with an allowed admin email.</div>
+
+        <div class="admin-grid">
+          <section class="stack">
+            <h3>Feedback</h3>
+            <div id="admin-feedback" class="list empty">Not loaded.</div>
+          </section>
+          <section class="stack">
+            <h3>Complaints</h3>
+            <div class="search-row">
+              <input id="transaction-search" placeholder="Search transaction ID" />
+              <button id="search-transaction" class="secondary" type="button">Search</button>
+            </div>
+            <div id="admin-complaints" class="list empty">Not loaded.</div>
+          </section>
+          <section class="stack">
+            <h3>Bug Reports</h3>
+            <div id="admin-bugs" class="list empty">Not loaded.</div>
+          </section>
+        </div>
+
+        <div class="admin-grid three">
+          <form id="response-form" class="stack">
+            <h3>Record Response</h3>
+            <label>
+              Record ID
+              <input name="id" required maxlength="80" placeholder="Paste record ID from the list" />
+            </label>
+            <label>
+              Status
+              <select name="status">
+                <option value="new">New</option>
+                <option value="reviewing">Reviewing</option>
+                <option value="waiting-payment-check">Waiting payment check</option>
+                <option value="resolved">Resolved</option>
+                <option value="rejected">Rejected</option>
+              </select>
+            </label>
+            <label>
+              Response note
+              <textarea name="response" maxlength="2000" placeholder="Write the admin response or follow-up note."></textarea>
+            </label>
+            <button type="submit">Save Response</button>
+            <p id="response-status" class="muted"></p>
+          </form>
+
+          <form id="certificate-form" class="stack">
+            <h3>Certificate Builder</h3>
+            <label>
+              Hunter name
+              <input name="hunterName" required maxlength="120" placeholder="Bug hunter name" />
+            </label>
+            <label>
+              Severity
+              <select name="severity">
+                <option>Critical</option>
+                <option>High</option>
+                <option>Medium</option>
+                <option>Low</option>
+                <option>Informational</option>
+              </select>
+            </label>
+            <label>
+              Bug title
+              <input name="title" required maxlength="180" placeholder="Stored XSS in notes field" />
+            </label>
+            <label>
+              Certificate note
+              <textarea name="note" maxlength="1200">For responsible disclosure and helping improve CredStore security.</textarea>
+            </label>
+            <div class="actions">
+              <button type="submit">Download PDF</button>
+              <button id="save-template" class="secondary" type="button">Save Template</button>
+            </div>
+          </form>
+
+          <form id="hall-form" class="stack">
+            <h3>Hall of Fame Entry</h3>
+            <label>
+              Name
+              <input name="name" required maxlength="120" />
+            </label>
+            <label>
+              Severity
+              <select name="severity">
+                <option>Critical</option>
+                <option>High</option>
+                <option>Medium</option>
+                <option>Low</option>
+                <option>Informational</option>
+              </select>
+            </label>
+            <label>
+              Recognition
+              <input name="title" required maxlength="180" />
+            </label>
+            <button type="submit">Publish Entry</button>
+            <p id="hall-status" class="muted"></p>
+          </form>
+        </div>
       </section>
     </main>
 
-    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js" defer></script>
     <script>
       const workerBase = "https://credstore.locamartin.workers.dev";
+      const googleClientId = "7346060566-39riegeih7sclmbcfenvqg9l2ggn0fnh.apps.googleusercontent.com";
       let currentLicense = "";
+      let adminToken = "";
 
       function formData(form) {
         return Object.fromEntries(new FormData(form).entries());
+      }
+
+      function authHeaders() {
+        return adminToken ? { authorization: `Bearer ${adminToken}` } : {};
+      }
+
+      async function readFileAsDataUrl(file) {
+        if (!file) return "";
+        if (file.size > 1024 * 1024) throw new Error("Screenshot must be 1 MB or smaller.");
+        return await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result || ""));
+          reader.onerror = () => reject(new Error("Screenshot could not be read."));
+          reader.readAsDataURL(file);
+        });
       }
 
       function setLicense(token) {
@@ -143,7 +347,7 @@
         const qr = document.getElementById("qr");
         qr.innerHTML = "";
         if (window.QRCode) {
-          window.QRCode.toCanvas(token, { width: 224, errorCorrectionLevel: "H" }, (error, canvas) => {
+          window.QRCode.toCanvas(token, { width: 260, errorCorrectionLevel: "H" }, (error, canvas) => {
             if (error) {
               qr.textContent = "QR generation failed.";
               return;
@@ -153,18 +357,116 @@
         }
       }
 
+      async function postJson(path, body, extraHeaders = {}) {
+        const response = await fetch(`${workerBase}${path}`, {
+          method: "POST",
+          headers: { "content-type": "application/json", ...extraHeaders },
+          body: JSON.stringify(body),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Request failed.");
+        return data;
+      }
+
+      function renderList(elementId, items, kind) {
+        const element = document.getElementById(elementId);
+        if (!items.length) {
+          element.className = "list empty";
+          element.textContent = "No records.";
+          return;
+        }
+        element.className = "list";
+        element.innerHTML = items
+          .map((item) => {
+            const screenshot = item.screenshot
+              ? `<a href="${item.screenshot}" target="_blank" rel="noreferrer">Open screenshot</a>`
+              : "";
+            return `<article class="record">
+              <strong>${escapeHtml(item.title || item.name || item.company || item.email || item.id)}</strong>
+              <span>${escapeHtml(item.email || item.buyerEmail || "")}</span>
+              <span>${escapeHtml(item.severity || item.transactionId || item.paymentReference || "")}</span>
+              <p>${escapeHtml(item.message || item.note || "")}</p>
+              ${item.response ? `<p class="admin-note">${escapeHtml(item.response)}</p>` : ""}
+              ${screenshot}
+              <small>ID: ${escapeHtml(item.id || "")}</small>
+              <small>Status: ${escapeHtml(item.status || "new")} ${kind ? `- ${kind}` : ""} ${escapeHtml(item.createdAt || "")}</small>
+            </article>`;
+          })
+          .join("");
+      }
+
+      function escapeHtml(value) {
+        return String(value || "")
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;");
+      }
+
+      async function loadPublicHall() {
+        try {
+          const response = await fetch(`${workerBase}/hall-of-fame`);
+          const data = await response.json();
+          renderList("hall-public", data.items || [], "public");
+        } catch {
+          document.getElementById("hall-public").textContent = "Hall of fame is unavailable.";
+        }
+      }
+
+      async function loadAdmin() {
+        if (!adminToken) return;
+        document.getElementById("admin-status").textContent = "Loading admin data...";
+        const response = await fetch(`${workerBase}/admin/items`, { headers: authHeaders() });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Admin load failed.");
+        renderList("admin-feedback", data.feedback || [], "feedback");
+        renderList("admin-complaints", data.complaints || [], "complaint");
+        renderList("admin-bugs", data.bugs || [], "bug");
+        renderList("hall-public", data.hall || [], "public");
+        document.getElementById("admin-status").textContent = `Signed in as ${data.adminEmail}.`;
+      }
+
+      function generateCertificatePdf(values) {
+        const jsPDF = window.jspdf?.jsPDF;
+        if (!jsPDF) {
+          alert("PDF engine is still loading. Try again in a moment.");
+          return;
+        }
+        const pdf = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
+        pdf.setFillColor(13, 16, 32);
+        pdf.rect(0, 0, 842, 595, "F");
+        pdf.setFillColor(68, 20, 95);
+        pdf.circle(90, 80, 160, "F");
+        pdf.setTextColor(248, 250, 252);
+        pdf.setFont("helvetica", "bold");
+        pdf.setFontSize(34);
+        pdf.text("CredStore Security Recognition", 72, 130);
+        pdf.setFontSize(20);
+        pdf.text(values.hunterName, 72, 210);
+        pdf.setFont("helvetica", "normal");
+        pdf.setFontSize(14);
+        pdf.setTextColor(170, 180, 196);
+        pdf.text("is recognized for responsible disclosure", 72, 240);
+        pdf.setTextColor(248, 250, 252);
+        pdf.setFontSize(22);
+        pdf.text(values.title, 72, 300, { maxWidth: 700 });
+        pdf.setFontSize(16);
+        pdf.text(`Severity: ${values.severity}`, 72, 350);
+        pdf.setTextColor(170, 180, 196);
+        pdf.setFontSize(12);
+        pdf.text(values.note || "Thank you for improving CredStore security.", 72, 390, { maxWidth: 700 });
+        pdf.setTextColor(139, 92, 246);
+        pdf.setFont("helvetica", "bold");
+        pdf.text("CredStore Pro", 72, 520);
+        pdf.save(`credstore-certificate-${values.hunterName.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.pdf`);
+      }
+
       document.getElementById("license-form").addEventListener("submit", async (event) => {
         event.preventDefault();
         const status = document.getElementById("license-status");
         status.textContent = "Generating license...";
         try {
-          const response = await fetch(`${workerBase}/licenses`, {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify(formData(event.currentTarget)),
-          });
-          const data = await response.json();
-          if (!response.ok) throw new Error(data.error || "License generation failed.");
+          const data = await postJson("/licenses", formData(event.currentTarget));
           setLicense(data.license);
           status.textContent = data.message || "License generated.";
         } catch (error) {
@@ -177,17 +479,39 @@
         const status = document.getElementById("contact-status");
         status.textContent = "Sending...";
         try {
-          const response = await fetch(`${workerBase}/contact`, {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify(formData(event.currentTarget)),
-          });
-          const data = await response.json();
-          if (!response.ok) throw new Error(data.error || "Message failed.");
-          status.textContent = "Message received.";
+          await postJson("/contact", formData(event.currentTarget));
+          status.textContent = "Feedback received.";
           event.currentTarget.reset();
         } catch (error) {
           status.textContent = error instanceof Error ? error.message : "Message failed.";
+        }
+      });
+
+      document.getElementById("complaint-form").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const status = document.getElementById("complaint-status");
+        status.textContent = "Submitting...";
+        try {
+          const values = formData(event.currentTarget);
+          values.screenshot = await readFileAsDataUrl(event.currentTarget.screenshot.files[0]);
+          await postJson("/complaints", values);
+          status.textContent = "Complaint received. Use the transaction ID for follow-up.";
+          event.currentTarget.reset();
+        } catch (error) {
+          status.textContent = error instanceof Error ? error.message : "Complaint failed.";
+        }
+      });
+
+      document.getElementById("bug-form").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const status = document.getElementById("bug-status");
+        status.textContent = "Submitting...";
+        try {
+          await postJson("/bugs", formData(event.currentTarget));
+          status.textContent = "Bug report received.";
+          event.currentTarget.reset();
+        } catch (error) {
+          status.textContent = error instanceof Error ? error.message : "Bug report failed.";
         }
       });
 
@@ -206,6 +530,102 @@
         link.download = "credstore-license.txt";
         link.click();
         URL.revokeObjectURL(url);
+      });
+
+      document.getElementById("admin-refresh").addEventListener("click", async () => {
+        try {
+          await loadAdmin();
+        } catch (error) {
+          document.getElementById("admin-status").textContent =
+            error instanceof Error ? error.message : "Admin refresh failed.";
+        }
+      });
+
+      document.getElementById("search-transaction").addEventListener("click", async () => {
+        const query = document.getElementById("transaction-search").value.trim();
+        if (!query || !adminToken) return;
+        const response = await fetch(`${workerBase}/admin/search?transactionId=${encodeURIComponent(query)}`, {
+          headers: authHeaders(),
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          document.getElementById("admin-status").textContent = data.error || "Search failed.";
+          return;
+        }
+        renderList("admin-complaints", data.items || [], "transaction search");
+      });
+
+      document.getElementById("certificate-form").addEventListener("submit", (event) => {
+        event.preventDefault();
+        generateCertificatePdf(formData(event.currentTarget));
+      });
+
+      document.getElementById("response-form").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const status = document.getElementById("response-status");
+        if (!adminToken) {
+          status.textContent = "Admin login required.";
+          return;
+        }
+        try {
+          await postJson("/admin/respond", formData(event.currentTarget), authHeaders());
+          status.textContent = "Response saved.";
+          await loadAdmin();
+        } catch (error) {
+          status.textContent = error instanceof Error ? error.message : "Response save failed.";
+        }
+      });
+
+      document.getElementById("save-template").addEventListener("click", async () => {
+        if (!adminToken) return;
+        try {
+          await postJson("/admin/certificate-template", formData(document.getElementById("certificate-form")), authHeaders());
+          document.getElementById("admin-status").textContent = "Certificate template saved.";
+        } catch (error) {
+          document.getElementById("admin-status").textContent =
+            error instanceof Error ? error.message : "Template save failed.";
+        }
+      });
+
+      document.getElementById("hall-form").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const status = document.getElementById("hall-status");
+        if (!adminToken) {
+          status.textContent = "Admin login required.";
+          return;
+        }
+        try {
+          await postJson("/admin/hall-of-fame", formData(event.currentTarget), authHeaders());
+          status.textContent = "Hall of fame entry published.";
+          event.currentTarget.reset();
+          await loadAdmin();
+        } catch (error) {
+          status.textContent = error instanceof Error ? error.message : "Publish failed.";
+        }
+      });
+
+      window.addEventListener("load", () => {
+        loadPublicHall();
+        if (window.google?.accounts?.id) {
+          window.google.accounts.id.initialize({
+            client_id: googleClientId,
+            callback: async (response) => {
+              adminToken = response.credential;
+              document.getElementById("admin-refresh").disabled = false;
+              try {
+                await loadAdmin();
+              } catch (error) {
+                document.getElementById("admin-status").textContent =
+                  error instanceof Error ? error.message : "Admin login failed.";
+              }
+            },
+          });
+          window.google.accounts.id.renderButton(document.getElementById("google-login"), {
+            theme: "filled_black",
+            size: "large",
+            text: "signin_with",
+          });
+        }
       });
     </script>
   </body>
