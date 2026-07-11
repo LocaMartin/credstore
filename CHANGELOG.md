@@ -2,6 +2,18 @@
 
 All notable changes to CredStore will be documented in this file.
 
+## [1.0.12] - 2026-07-11
+
+### Changed
+
+- Switched offline license signing and verification from ECDSA P-256 to Ed25519, matching the intended compact offline license-key design.
+- Added a pure JavaScript Ed25519 verifier so license validation is consistent across desktop, Android WebView, and browsers.
+- Updated the Cloudflare Worker signer flow to issue `alg: "Ed25519"` license payloads.
+
+### Fixed
+
+- Added a root `logo.svg` and `.nojekyll` so GitHub Pages serves the license portal logo correctly.
+
 ## [1.0.11] - 2026-07-11
 
 ### Fixed

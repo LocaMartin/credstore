@@ -4,6 +4,7 @@ import type React from "react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { QRCodeCanvas } from "qrcode.react"
 import { registerPlugin } from "@capacitor/core"
+import { hashes as ed25519Hashes, verifyAsync as verifyEd25519 } from "@noble/ed25519"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -74,7 +75,7 @@ import {
 } from "lucide-react"
 import { ResetCredStore } from "@/components/reset-button"
 
-const APP_VERSION = "1.0.11"
+const APP_VERSION = "1.0.12"
 const MAX_UNLOCK_DELAY_MS = 30000
 const MAX_FAILED_UNLOCKS = 10
 const FREE_SYNC_DEVICE_LIMIT = 5
@@ -84,6 +85,9 @@ const INSTALLATION_ID_STORAGE_KEY = "credstore_installation_id"
 const CREDSTORE_DEEPLINK_SCHEME = "credstore"
 const RUNTIME_LOGO_PATH = "./logo.svg"
 const LICENSE_PUBLIC_KEY_STORAGE_KEY = "credstore_license_public_key"
+
+ed25519Hashes.sha512Async = async (message) =>
+  new Uint8Array(await crypto.subtle.digest("SHA-512", new Uint8Array(message).buffer))
 
 type CredStoreBiometricPlugin = {
   isAvailable: () => Promise<BiometricAvailability>
@@ -130,27 +134,28 @@ declare global {
 const defaultLicensePublicKey = {
   key_ops: ["verify"],
   ext: true,
-  kty: "EC",
-  x: "v4mRarDgJXwTvEAFiLWmMSBK1N8T3vPyYDi31BmpFv4",
-  y: "7un9ScsUlv78MVh6-0IHdR2KnMC8Nc3b38wz-4cc41M",
-  crv: "P-256",
+  alg: "Ed25519",
+  crv: "Ed25519",
+  x: "9zQJn5yYzZ5YkRP1SGIhlniKxkG5iKCWWMjlfkDmhm4",
+  kty: "OKP",
 } satisfies JsonWebKey
 
 const TEST_LICENSE_TOKEN =
-  "eyJwbGFuIjoiZW50ZXJwcmlzZSIsImtpbmQiOiJ0ZXN0IiwibGljZW5zZUlkIjoiY3JlZHN0b3JlLXRlc3QtMjAyNiIs" +
-  "ImNvbXBhbnkiOiJMb2NhIE1hcnRpbiBUZXN0IExhYiIsImJ1eWVyRW1haWwiOiJsb2NhYm95ZmZAZ21haWwuY29tIiwibW" +
-  "F4RGV2aWNlcyI6NTAsIm1heFVzZXJzIjo1MCwiaXNzdWVkQXQiOiIyMDI2LTA3LTEwVDIyOjE1OjEzLjcwOFoiLCJmZWF0" +
-  "dXJlcyI6WyJwcmVtaXVtLXN5bmMiLCJlbXBsb3llZS1wcm9maWxlcyIsImFkbWluLWNvbnRyb2xzIiwidmlzaWJpbGl0eS" +
-  "1jb250cm9scyIsImN1c3RvbWl6YXRpb24tZmVlZGJhY2siXX0.ejykd2500pPeUNBkP1KNXmDfvbY1fKIQjslz_v1rg2sm" +
-  "3-tekIVAVmdqqZ-02DyhmpcP1hmk4X6VZMP6MQsSkw"
+  "eyJhbGciOiJFZDI1NTE5IiwicGxhbiI6ImVudGVycHJpc2UiLCJraW5kIjoidGVzdCIsImxpY2Vuc2VJZCI6ImNyZWRzdG" +
+  "9yZS10ZXN0LTIwMjYiLCJjb21wYW55IjoiTG9jYSBNYXJ0aW4gVGVzdCBMYWIiLCJidXllckVtYWlsIjoibG9jYWJveWZm" +
+  "QGdtYWlsLmNvbSIsIm1heERldmljZXMiOjUwLCJtYXhVc2VycyI6NTAsImlzc3VlZEF0IjoiMjAyNi0wNy0xMVQwMzoxMD" +
+  "ozMC4xODlaIiwiZmVhdHVyZXMiOlsicHJlbWl1bS1zeW5jIiwiZW1wbG95ZWUtcHJvZmlsZXMiLCJhZG1pbi1jb250cm9s" +
+  "cyIsInZpc2liaWxpdHktY29udHJvbHMiLCJjdXN0b21pemF0aW9uLWZlZWRiYWNrIl19.pN0nUGWK8ull7tUqj_W2cQpRy" +
+  "5hqlK-6sSncMeWcdrgkyFW79wjQmFfp31fuIt34QE7cqrbeHCJPDc_Psy_tBw"
 
 const TRIAL_LICENSE_TOKEN =
-  "eyJwbGFuIjoiZW50ZXJwcmlzZSIsImtpbmQiOiJ0cmlhbCIsImxpY2Vuc2VJZCI6ImNyZWRzdG9yZS10cmlhbC01LWRheS" +
-  "1kZW1vIiwiY29tcGFueSI6IjUgRGF5IFRyaWFsIERlbW8iLCJidXllckVtYWlsIjoidHJpYWxAZXhhbXBsZS5jb20iLCJt" +
-  "YXhEZXZpY2VzIjo1MCwibWF4VXNlcnMiOjUwLCJpc3N1ZWRBdCI6IjIwMjYtMDctMTBUMjI6MTU6MTMuNzA4WiIsImV4cG" +
-  "lyZXNBdCI6IjIwMjYtMDctMTVUMjI6MTU6MTMuNzA4WiIsImZlYXR1cmVzIjpbInByZW1pdW0tc3luYyIsImVtcGxveWVl" +
-  "LXByb2ZpbGVzIiwiYWRtaW4tY29udHJvbHMiLCJ2aXNpYmlsaXR5LWNvbnRyb2xzIiwiY3VzdG9taXphdGlvbi1mZWVkYm" +
-  "FjayJdfQ.t1PVi-OxfYkIqEudapZjnO7Lhwpt_ZZWs3Kn4Tg5WVVpBWSY1JXv2r6-lh7oqF7GVhyp20MHu7I-Srz4KW4QPA"
+  "eyJhbGciOiJFZDI1NTE5IiwicGxhbiI6ImVudGVycHJpc2UiLCJraW5kIjoidHJpYWwiLCJsaWNlbnNlSWQiOiJjcmVkc3" +
+  "RvcmUtdHJpYWwtNS1kYXktZGVtbyIsImNvbXBhbnkiOiI1IERheSBUcmlhbCBEZW1vIiwiYnV5ZXJFbWFpbCI6InRyaWFs" +
+  "QGV4YW1wbGUuY29tIiwibWF4RGV2aWNlcyI6NTAsIm1heFVzZXJzIjo1MCwiaXNzdWVkQXQiOiIyMDI2LTA3LTExVDAzOj" +
+  "EwOjMwLjE4OVoiLCJleHBpcmVzQXQiOiIyMDI2LTA3LTE2VDAzOjEwOjMwLjE4OVoiLCJmZWF0dXJlcyI6WyJwcmVtaXVt" +
+  "LXN5bmMiLCJlbXBsb3llZS1wcm9maWxlcyIsImFkbWluLWNvbnRyb2xzIiwidmlzaWJpbGl0eS1jb250cm9scyIsImN1c3" +
+  "RvbWl6YXRpb24tZmVlZGJhY2siXX0.9m4wizGHgkdG6BymO6kS8rj-H3gMYfMyq9nNeupNGA9ZvCluCYMIpYFx6k1yl9z" +
+  "CryQ0mHd4je5aDpF3FOrmBw"
 
 function encodePayload(value: unknown) {
   return bytesToBase64Url(new TextEncoder().encode(JSON.stringify(value)))
@@ -1047,20 +1052,16 @@ export default function CredStore() {
     const [payloadPart, signaturePart] = token.trim().split(".")
     if (!payloadPart || !signaturePart) throw new Error("License must be payload.signature")
 
-    const publicKeyText = (await readStoredValue(LICENSE_PUBLIC_KEY_STORAGE_KEY)) || JSON.stringify(defaultLicensePublicKey)
-    const publicKey = await crypto.subtle.importKey(
-      "jwk",
-      JSON.parse(publicKeyText) as JsonWebKey,
-      { name: "ECDSA", namedCurve: "P-256" },
-      false,
-      ["verify"],
-    )
+    const storedPublicKeyText = await readStoredValue(LICENSE_PUBLIC_KEY_STORAGE_KEY)
+    const storedPublicKey = storedPublicKeyText ? (JSON.parse(storedPublicKeyText) as JsonWebKey) : null
+    const publicKey = storedPublicKey?.crv === "Ed25519" ? storedPublicKey : defaultLicensePublicKey
     const payloadBytes = new TextEncoder().encode(payloadPart)
     const signature = base64UrlToBytes(signaturePart)
-    const verified = await crypto.subtle.verify({ name: "ECDSA", hash: "SHA-256" }, publicKey, signature, payloadBytes)
+    const verified = await verifyEd25519(signature, payloadBytes, base64UrlToBytes(publicKey.x || ""))
     if (!verified) throw new Error("License signature is invalid")
 
     const payload = decodePayload<Omit<LicenseRecord, "token">>(payloadPart)
+    if (payload.alg !== "Ed25519") throw new Error("License algorithm is unsupported")
     if (payload.expiresAt && Date.parse(payload.expiresAt) < Date.now()) {
       throw new Error("License is expired")
     }

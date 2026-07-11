@@ -79,6 +79,7 @@ export interface SyncedDevice {
 
 export interface LicenseRecord {
   token: string
+  alg?: "Ed25519"
   plan: "community" | "enterprise"
   kind?: "lifetime" | "trial" | "test"
   licenseId?: string
