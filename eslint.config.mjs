@@ -6,6 +6,7 @@ export default [
       ".next/**",
       "android/**",
       "dist/**",
+      "ios/**",
       "node_modules/**",
       "out/**",
     ],

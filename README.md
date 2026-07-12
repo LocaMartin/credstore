@@ -4,7 +4,7 @@
   <img src="./.res/text.svg" alt="CredStore">
 </div>
 
-<p align="center"><b>1.0.12</b></p>
+<p align="center"><b>1.0.13</b></p>
 
 CredStore is a strictly offline personal credential manager for desktop, web, and Android.
 
@@ -85,18 +85,24 @@ password key can unlock the vault without storing plaintext credentials or a reu
 Password master keys must be at least 8 characters and include lowercase, uppercase, number, and symbol characters.
 After 10 failed unlock attempts, CredStore applies a local lockout delay.
 
-Fingerprint and face recognition keys are available on Android devices that support strong biometrics. The Android
-implementation stores a wrapped vault key through Android Keystore and requires biometric confirmation before the key can
-be used.
+Fingerprint and face recognition keys are available through platform-specific native bridges:
 
-Desktop biometric unlock is not implemented. There is no single secure package that covers Android, iOS, Windows, macOS,
-and Linux hardware biometrics with vault-key unwrapping. iOS needs an Apple LocalAuthentication Capacitor plugin. macOS,
-Windows, and Linux need separate Electron main-process integrations; Linux biometric support usually depends on local
-PAM/fprintd configuration and is not reliable enough to present as a default unlock method.
+- Android and iOS use native biometric/keychain support through Capacitor plugins.
+- macOS uses Touch ID when Electron can call the local system biometric prompt.
+- Windows uses Windows Hello through the Electron main process.
+- Linux uses `fprintd` when installed and enrolled, then stores the wrapped vault key through Electron safeStorage.
+
+Linux biometric support depends on the user's distribution, desktop keyring, PAM/fprintd setup, and fingerprint reader
+driver. If those system services are unavailable, CredStore falls back to password master keys.
 
 ## Security Architecture
 
-CredStore does not rely on hiding secrets inside the app binary. If someone decompiles the app with Ghidra, IDA Pro, apktool, or `strings`, user credentials still depend on:
+CredStore treats every offline client device as a hostile environment. No offline-only app can fully stop a determined
+attacker with local admin access, but CredStore layers controls so bypassing one check does not expose plaintext vault
+data or automatically unlock premium features.
+
+CredStore does not rely on hiding user secrets inside the app binary. If someone decompiles the app with Ghidra, IDA Pro,
+apktool, or `strings`, user credentials still depend on:
 
 - The user's master key strength.
 - Random salts and IVs.
@@ -106,6 +112,31 @@ CredStore does not rely on hiding secrets inside the app binary. If someone deco
 - No stored reusable login verifier.
 
 Offline brute force cannot be made impossible if an attacker has the encrypted vault and the user chose a weak master key. Use a long, unique master key.
+
+### Offline Hardening Layers
+
+- Vault cryptography: AES-256-GCM authenticated encryption, PBKDF2-SHA-256 with 600,000 iterations, random 24-byte salts,
+  random IVs, and a random vault key wrapped by each master key slot.
+- Biometric key release: biometric slots store only protected vault-key material. The biometric prompt must succeed before
+  the native bridge returns the wrapped secret to the renderer.
+- Offline license validation: enterprise tokens use Ed25519 signatures. The app contains only the verification public key,
+  split into fragments, and validates account identity, expiry, device/user limits, and feature flags locally.
+- Clock rollback guard: signed trial and enterprise license validation records the last seen time locally and rejects
+  obvious system-clock rollback attempts.
+- Electron file integrity: packaged desktop builds verify a generated SHA-256 manifest for exported app assets and
+  Electron entry files before opening the vault UI.
+- Android app signature pinning: release builds can set `EXPECTED_ANDROID_CERT_SHA256` so the app verifies its signing
+  certificate hash at startup and exits if it was re-signed.
+- Runtime protection: release builds check common debugger, tracing, root, jailbreak, Frida/Xposed, and remote-debugging
+  indicators where the platform exposes reliable local signals.
+- OS code signing: production Windows, macOS/iOS, and Android releases should still be signed with the platform-native
+  certificate systems. The in-app checks are a second layer, not a replacement for OS-enforced signing.
+
+For Android production builds, set the expected certificate fingerprint before building:
+
+```bash
+EXPECTED_ANDROID_CERT_SHA256=AA:BB:CC:... ./gradlew assembleRelease
+```
 
 ## Strict Offline Controls
 

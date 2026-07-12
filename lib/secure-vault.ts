@@ -43,7 +43,7 @@ export interface KeySlot {
 }
 
 export interface BiometricKey {
-  platform: "android-keystore"
+  platform: "android-keystore" | "capgo-secure-data" | "electron-safe-storage"
   encrypted: string
   iv: string
 }

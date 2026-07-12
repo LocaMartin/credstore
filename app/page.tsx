@@ -3,7 +3,8 @@
 import type React from "react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { QRCodeCanvas } from "qrcode.react"
-import { registerPlugin } from "@capacitor/core"
+import { Capacitor, registerPlugin } from "@capacitor/core"
+import { AccessControl, NativeBiometric } from "@capgo/capacitor-native-biometric"
 import { hashes as ed25519Hashes, verifyAsync as verifyEd25519 } from "@noble/ed25519"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -51,6 +52,7 @@ import {
   type VaultData,
   type VaultRecord,
   type LicenseRecord,
+  type BiometricKey,
 } from "@/lib/secure-vault"
 import {
   Camera,
@@ -75,7 +77,7 @@ import {
 } from "lucide-react"
 import { ResetCredStore } from "@/components/reset-button"
 
-const APP_VERSION = "1.0.12"
+const APP_VERSION = "1.0.13"
 const MAX_UNLOCK_DELAY_MS = 30000
 const MAX_FAILED_UNLOCKS = 10
 const FREE_SYNC_DEVICE_LIMIT = 5
@@ -84,7 +86,9 @@ const LOCKOUT_STORAGE_KEY = "credstore_lockout_until"
 const INSTALLATION_ID_STORAGE_KEY = "credstore_installation_id"
 const CREDSTORE_DEEPLINK_SCHEME = "credstore"
 const RUNTIME_LOGO_PATH = "./logo.svg"
-const LICENSE_PUBLIC_KEY_STORAGE_KEY = "credstore_license_public_key"
+const LICENSE_CLOCK_STORAGE_KEY = "credstore_license_last_seen_at"
+const BLE_SYNC_SERVICE_UUID = "1e89b6a8-0f62-4ce8-9478-83d94d4aa83a"
+const BLE_SYNC_CHARACTERISTIC_UUID = "e3f63ac1-890a-4f95-8c95-2d37e66b0872"
 
 ed25519Hashes.sha512Async = async (message) =>
   new Uint8Array(await crypto.subtle.digest("SHA-512", new Uint8Array(message).buffer))
@@ -95,7 +99,43 @@ type CredStoreBiometricPlugin = {
   getSecret: (options: { slotId: string; encrypted: string; iv: string }) => Promise<{ secret: string }>
 }
 
+type BluetoothDevice = {
+  id: string
+  name?: string
+}
+
+type CredStoreBluetoothPlugin = {
+  requestBluetoothPermissions?: () => Promise<{ granted: boolean }>
+  isAvailable: () => Promise<{ available: boolean; code?: string; message?: string }>
+  listBondedDevices: () => Promise<{ devices: BluetoothDevice[] }>
+  startReceiver: () => Promise<{ payload: string }>
+  sendPayload: (options: { deviceId: string; payload: string }) => Promise<void>
+  stopReceiver: () => Promise<void>
+}
+
+type BluetoothRemoteGATTCharacteristic = {
+  writeValueWithResponse?: (value: BufferSource) => Promise<void>
+  writeValue: (value: BufferSource) => Promise<void>
+}
+
+type BluetoothRemoteGATTService = {
+  getCharacteristic: (characteristic: string) => Promise<BluetoothRemoteGATTCharacteristic>
+}
+
+type BluetoothRemoteGATTServer = {
+  connected: boolean
+  connect: () => Promise<BluetoothRemoteGATTServer>
+  disconnect: () => void
+  getPrimaryService: (service: string) => Promise<BluetoothRemoteGATTService>
+}
+
+type BluetoothBrowserDevice = {
+  name?: string
+  gatt?: BluetoothRemoteGATTServer
+}
+
 const CredStoreBiometric = registerPlugin<CredStoreBiometricPlugin>("CredStoreBiometric")
+const CredStoreBluetooth = registerPlugin<CredStoreBluetoothPlugin>("CredStoreBluetooth")
 
 const THEMES: Record<ThemeName, string> = {
   indigo: "from-purple-900 via-blue-900 to-indigo-900",
@@ -128,17 +168,24 @@ declare global {
       maximize: () => Promise<void>
       close: () => Promise<void>
     }
+    credstoreNative?: {
+      biometric: CredStoreBiometricPlugin
+      bluetooth?: {
+        isAvailable: () => Promise<{ available: boolean; code?: string; message?: string }>
+        listBondedDevices?: () => Promise<{ devices: BluetoothDevice[] }>
+        startReceiver?: () => Promise<{ payload: string }>
+        sendPayload?: (options: { deviceId: string; payload: string }) => Promise<void>
+        stopReceiver?: () => Promise<void>
+      }
+    }
   }
 }
 
-const defaultLicensePublicKey = {
-  key_ops: ["verify"],
-  ext: true,
-  alg: "Ed25519",
-  crv: "Ed25519",
-  x: "9zQJn5yYzZ5YkRP1SGIhlniKxkG5iKCWWMjlfkDmhm4",
-  kty: "OKP",
-} satisfies JsonWebKey
+const licensePublicKeyFragments = ["9zQJn5yYzZ", "5YkRP1SGIh", "lniKxkG5iK", "CWWMjlfkDm", "hm4"] as const
+
+function getLicensePublicKeyBytes() {
+  return base64UrlToBytes(licensePublicKeyFragments.join(""))
+}
 
 const TEST_LICENSE_TOKEN =
   "eyJhbGciOiJFZDI1NTE5IiwicGxhbiI6ImVudGVycHJpc2UiLCJraW5kIjoidGVzdCIsImxpY2Vuc2VJZCI6ImNyZWRzdG" +
@@ -188,15 +235,19 @@ function checksumText(value: string) {
   return (hash >>> 0).toString(16).padStart(8, "0")
 }
 
-function createSyncFrames(vault: VaultRecord) {
-  const sessionId = createId()
-  const payload = encodePayload({
+function createSyncPayload(vault: VaultRecord) {
+  return encodePayload({
     scheme: CREDSTORE_DEEPLINK_SCHEME,
     type: "credstore-offline-sync",
     version: 2,
     createdAt: new Date().toISOString(),
     vault,
   })
+}
+
+function createSyncFrames(vault: VaultRecord) {
+  const sessionId = createId()
+  const payload = createSyncPayload(vault)
   const checksum = checksumText(payload)
   const chunks = Array.from({ length: Math.ceil(payload.length / SYNC_FRAME_CHUNK_SIZE) }, (_, index) =>
     payload.slice(index * SYNC_FRAME_CHUNK_SIZE, (index + 1) * SYNC_FRAME_CHUNK_SIZE),
@@ -214,6 +265,32 @@ function createSyncFrames(vault: VaultRecord) {
       chunk,
     } satisfies CredStoreSyncFrame),
   )
+}
+
+function createBluetoothSyncChunks(payload: string) {
+  const chunkSize = 360
+  const total = Math.max(1, Math.ceil(payload.length / chunkSize))
+
+  return Array.from({ length: total }, (_, index) =>
+    new TextEncoder().encode(
+      JSON.stringify({
+        i: index,
+        t: total,
+        d: payload.slice(index * chunkSize, (index + 1) * chunkSize),
+      }),
+    ),
+  )
+}
+
+async function assertMonotonicLicenseClock() {
+  const now = Date.now()
+  const storedLastSeen = Number(await readStoredValue(LICENSE_CLOCK_STORAGE_KEY))
+
+  if (Number.isFinite(storedLastSeen) && storedLastSeen > now + 120000) {
+    throw new Error("System clock rollback detected. Restore the correct date and time to validate licenses.")
+  }
+
+  await writeStoredValue(LICENSE_CLOCK_STORAGE_KEY, String(Math.max(now, Number.isFinite(storedLastSeen) ? storedLastSeen : 0)))
 }
 
 function describeBiometricAvailability(result: BiometricAvailability) {
@@ -235,6 +312,113 @@ function describeBiometricAvailability(result: BiometricAvailability) {
     default:
       return result.message || "Biometric unlock is not available on this device."
   }
+}
+
+async function getBiometricAvailability(): Promise<BiometricAvailability> {
+  if (typeof window !== "undefined" && window.credstoreNative?.biometric) {
+    return window.credstoreNative.biometric.isAvailable()
+  }
+
+  if (Capacitor.isNativePlatform()) {
+    try {
+      const result = await NativeBiometric.isAvailable({ useFallback: false })
+      return {
+        available: result.isAvailable && (result.strongBiometryIsAvailable || result.biometryType !== 0),
+        code: result.errorCode ? String(result.errorCode) : result.isAvailable ? "AVAILABLE" : "UNAVAILABLE",
+        message: result.isAvailable ? "Native biometric unlock is available." : "Native biometric unlock is unavailable.",
+      }
+    } catch {
+      try {
+        return await CredStoreBiometric.isAvailable()
+      } catch {
+        return { available: false, code: "PLUGIN_UNAVAILABLE" }
+      }
+    }
+  }
+
+  return { available: false, code: "PLUGIN_UNAVAILABLE", message: "Native biometric support is unavailable in this build." }
+}
+
+async function createBiometricSecret(slotId: string, secret: string): Promise<BiometricKey> {
+  if (typeof window !== "undefined" && window.credstoreNative?.biometric) {
+    const protectedSecret = await window.credstoreNative.biometric.createSecret({ slotId, secret })
+    return { platform: "electron-safe-storage", encrypted: protectedSecret.encrypted, iv: protectedSecret.iv }
+  }
+
+  if (Capacitor.isNativePlatform()) {
+    try {
+      await NativeBiometric.setData({
+        key: `credstore-vault-key-${slotId}`,
+        value: secret,
+        accessControl: AccessControl.BIOMETRY_ANY,
+        authValidityDuration: 0,
+        title: "Save CredStore biometric key",
+        negativeButtonText: "Cancel",
+      })
+      return { platform: "capgo-secure-data", encrypted: slotId, iv: "capgo-secure-data" }
+    } catch {
+      const protectedSecret = await CredStoreBiometric.createSecret({ slotId, secret })
+      return { platform: "android-keystore", encrypted: protectedSecret.encrypted, iv: protectedSecret.iv }
+    }
+  }
+
+  throw new Error("Biometric storage is not available")
+}
+
+async function getBiometricSecret(slotId: string, biometricKey: BiometricKey): Promise<string> {
+  if (biometricKey.platform === "electron-safe-storage") {
+    if (!window.credstoreNative?.biometric) throw new Error("Desktop biometric bridge unavailable")
+    const result = await window.credstoreNative.biometric.getSecret({
+      slotId,
+      encrypted: biometricKey.encrypted,
+      iv: biometricKey.iv,
+    })
+    return result.secret
+  }
+
+  if (biometricKey.platform === "capgo-secure-data") {
+    const result = await NativeBiometric.getSecureData({
+      key: `credstore-vault-key-${slotId}`,
+      reason: "Unlock your CredStore vault",
+      title: "Unlock CredStore",
+      subtitle: "Confirm your fingerprint or face authentication.",
+      negativeButtonText: "Cancel",
+    })
+    return result.value
+  }
+
+  const result = await CredStoreBiometric.getSecret({
+    slotId,
+    encrypted: biometricKey.encrypted,
+    iv: biometricKey.iv,
+  })
+  return result.secret
+}
+
+async function getBluetoothAvailability() {
+  if (typeof window !== "undefined" && window.credstoreNative?.bluetooth) {
+    return window.credstoreNative.bluetooth.isAvailable()
+  }
+
+  if (Capacitor.isNativePlatform()) {
+    try {
+      return await CredStoreBluetooth.isAvailable()
+    } catch {
+      return { available: false, code: "PLUGIN_UNAVAILABLE", message: "Native Bluetooth plugin is unavailable." }
+    }
+  }
+
+  return {
+    available: false,
+    code: "PLUGIN_UNAVAILABLE",
+    message: "Bluetooth sync requires the native desktop or mobile build.",
+  }
+}
+
+async function ensureBluetoothPermissions() {
+  if (!Capacitor.isNativePlatform()) return true
+  const result = await CredStoreBluetooth.requestBluetoothPermissions?.()
+  return result?.granted !== false
 }
 
 function isSyncFrame(value: unknown): value is CredStoreSyncFrame {
@@ -436,6 +620,8 @@ export default function CredStore() {
   const [syncFrameIndex, setSyncFrameIndex] = useState(0)
   const [syncImportText, setSyncImportText] = useState("")
   const [syncMessage, setSyncMessage] = useState("")
+  const [bluetoothAvailable, setBluetoothAvailable] = useState(false)
+  const [bluetoothDevices, setBluetoothDevices] = useState<BluetoothDevice[]>([])
   const [vaultData, setVaultData] = useState<VaultData>(normalizeVaultData(null))
   const [licenseToken, setLicenseToken] = useState("")
   const [licenseMessage, setLicenseMessage] = useState("")
@@ -522,10 +708,17 @@ export default function CredStore() {
       }
 
       try {
-        const result = await CredStoreBiometric.isAvailable()
+        const result = await getBiometricAvailability()
         setBiometricAvailability(result)
       } catch {
         setBiometricAvailability({ available: false, code: "PLUGIN_UNAVAILABLE" })
+      }
+
+      try {
+        const result = await getBluetoothAvailability()
+        setBluetoothAvailable(result.available)
+      } catch {
+        setBluetoothAvailable(false)
       }
 
       setIsLocked(true)
@@ -554,6 +747,20 @@ export default function CredStore() {
       document.removeEventListener("touchstart", updateActivity)
     }
   }, [isLocked, lockVault])
+
+  useEffect(() => {
+    if (isLocked || !activeLicense) return
+
+    const updateLicenseClock = () => {
+      writeStoredValue(LICENSE_CLOCK_STORAGE_KEY, String(Date.now())).catch(() => {
+        // Best effort: the next license validation still checks the stored timestamp.
+      })
+    }
+
+    updateLicenseClock()
+    const interval = window.setInterval(updateLicenseClock, 60000)
+    return () => window.clearInterval(interval)
+  }, [activeLicense, isLocked])
 
   useEffect(() => {
     if (!isLocked || !isUnlockDelayed) return
@@ -734,13 +941,9 @@ export default function CredStore() {
           return
         }
 
-        const result = await CredStoreBiometric.getSecret({
-          slotId: slot.id,
-          encrypted: slot.biometricKey.encrypted,
-          iv: slot.biometricKey.iv,
-        })
+        const secret = await getBiometricSecret(slot.id, slot.biometricKey)
 
-        await unlockWithVaultKey(storedVault, base64ToBytes(result.secret))
+        await unlockWithVaultKey(storedVault, base64ToBytes(secret))
       } catch {
         setBiometricMessage("Biometric unlock failed.")
       }
@@ -853,10 +1056,7 @@ export default function CredStore() {
         return
       }
 
-      const protectedSecret = await CredStoreBiometric.createSecret({
-        slotId,
-        secret: bytesToBase64(vaultKey),
-      })
+      const biometricKey = await createBiometricSecret(slotId, bytesToBase64(vaultKey))
       const nextRecord: VaultRecord = {
         ...vaultRecord,
         keySlots: [
@@ -866,11 +1066,7 @@ export default function CredStore() {
             type,
             label,
             enabled: true,
-            biometricKey: {
-              platform: "android-keystore",
-              encrypted: protectedSecret.encrypted,
-              iv: protectedSecret.iv,
-            },
+            biometricKey,
           },
         ],
       }
@@ -919,8 +1115,115 @@ export default function CredStore() {
     setSyncMessage(
       frames.length > 1
         ? `Generated ${frames.length} QR frames. Scan every frame on the receiver.`
-        : "One QR frame generated. Scan it on the receiver.",
+      : "One QR frame generated. Scan it on the receiver.",
     )
+  }, [maxSyncDevices, vaultData.metadata?.syncedDevices.length, vaultRecord])
+
+  const loadBluetoothDevices = useCallback(async () => {
+    setSyncMessage("Checking Bluetooth...")
+    try {
+      if (!(await ensureBluetoothPermissions())) {
+        setSyncMessage("Bluetooth permission was denied.")
+        setBluetoothAvailable(false)
+        return
+      }
+
+      const availability = await getBluetoothAvailability()
+      setBluetoothAvailable(availability.available)
+      if (!availability.available) {
+        setSyncMessage(availability.message || "Bluetooth is not available or not enabled.")
+        return
+      }
+
+      if (!Capacitor.isNativePlatform()) {
+        setSyncMessage("Desktop Bluetooth transfer still needs a native desktop adapter. Use QR sync on desktop for now.")
+        return
+      }
+
+      const result = await CredStoreBluetooth.listBondedDevices()
+      setBluetoothDevices(result.devices || [])
+      setSyncMessage(
+        result.devices.length
+          ? "Paired Bluetooth devices loaded. Pick the receiver device."
+          : "No paired Bluetooth devices found. Pair both devices in system Bluetooth settings first.",
+      )
+    } catch (error) {
+      setSyncMessage(error instanceof Error ? error.message : "Bluetooth device lookup failed.")
+    }
+  }, [])
+
+  const sendBluetoothSync = useCallback(
+    async (device: BluetoothDevice) => {
+      if (!vaultRecord) return
+      const deviceCount = vaultData.metadata?.syncedDevices.length || 1
+      if (deviceCount >= maxSyncDevices) {
+        setSyncMessage(`Device sync limit reached (${deviceCount}/${maxSyncDevices}). Add an enterprise license to sync more devices.`)
+        return
+      }
+
+      try {
+        if (!(await ensureBluetoothPermissions())) {
+          setSyncMessage("Bluetooth permission was denied.")
+          return
+        }
+
+        if (!Capacitor.isNativePlatform()) {
+          setSyncMessage("Desktop Bluetooth transfer still needs a native desktop adapter. Use QR sync on desktop for now.")
+          return
+        }
+
+        setSyncMessage(`Sending encrypted vault to ${device.name || device.id}...`)
+        await CredStoreBluetooth.sendPayload({ deviceId: device.id, payload: createSyncPayload(vaultRecord) })
+        setSyncMessage(`Bluetooth sync sent to ${device.name || device.id}.`)
+      } catch (error) {
+        setSyncMessage(error instanceof Error ? error.message : "Bluetooth send failed.")
+      }
+    },
+    [maxSyncDevices, vaultData.metadata?.syncedDevices.length, vaultRecord],
+  )
+
+  const sendWebBluetoothSync = useCallback(async () => {
+    if (!vaultRecord) return
+    const deviceCount = vaultData.metadata?.syncedDevices.length || 1
+    if (deviceCount >= maxSyncDevices) {
+      setSyncMessage(`Device sync limit reached (${deviceCount}/${maxSyncDevices}). Add an enterprise license to sync more devices.`)
+      return
+    }
+
+    if (!navigator.bluetooth?.requestDevice) {
+      setSyncMessage("Web Bluetooth is not available in this desktop build. Use QR sync or Android paired Bluetooth.")
+      return
+    }
+
+    let server: BluetoothRemoteGATTServer | null = null
+    try {
+      setSyncMessage("Pick a nearby CredStore BLE receiver...")
+      const device = await navigator.bluetooth.requestDevice({
+        filters: [{ services: [BLE_SYNC_SERVICE_UUID] }],
+        optionalServices: [BLE_SYNC_SERVICE_UUID],
+      })
+      if (!device.gatt) throw new Error("Bluetooth GATT is unavailable for this receiver.")
+
+      server = await device.gatt.connect()
+      const service = await server.getPrimaryService(BLE_SYNC_SERVICE_UUID)
+      const characteristic = await service.getCharacteristic(BLE_SYNC_CHARACTERISTIC_UUID)
+      const chunks = createBluetoothSyncChunks(createSyncPayload(vaultRecord))
+
+      setSyncMessage(`Sending ${chunks.length} Bluetooth chunks to ${device.name || "CredStore receiver"}...`)
+      for (const chunk of chunks) {
+        if (characteristic.writeValueWithResponse) {
+          await characteristic.writeValueWithResponse(chunk)
+        } else {
+          await characteristic.writeValue(chunk)
+        }
+      }
+
+      setSyncMessage(`Bluetooth sync sent to ${device.name || "CredStore receiver"}.`)
+    } catch (error) {
+      setSyncMessage(error instanceof Error ? error.message : "Web Bluetooth send failed.")
+    } finally {
+      if (server?.connected) server.disconnect()
+    }
   }, [maxSyncDevices, vaultData.metadata?.syncedDevices.length, vaultRecord])
 
   const importSyncPayload = useCallback(
@@ -994,6 +1297,35 @@ export default function CredStore() {
     [lockVault, syncImportText],
   )
 
+  const receiveBluetoothSync = useCallback(async () => {
+    setSyncMessage("Waiting for Bluetooth sync...")
+    try {
+      if (!(await ensureBluetoothPermissions())) {
+        setSyncMessage("Bluetooth permission was denied.")
+        return
+      }
+
+      if (!Capacitor.isNativePlatform()) {
+        setSyncMessage("Desktop Bluetooth transfer still needs a native desktop adapter. Use QR sync on desktop for now.")
+        return
+      }
+
+      const result = await CredStoreBluetooth.startReceiver()
+      await importSyncPayload(result.payload)
+    } catch (error) {
+      setSyncMessage(error instanceof Error ? error.message : "Bluetooth receive failed.")
+    }
+  }, [importSyncPayload])
+
+  const cancelBluetoothReceive = useCallback(async () => {
+    try {
+      if (Capacitor.isNativePlatform()) await CredStoreBluetooth.stopReceiver()
+      setSyncMessage("Bluetooth receiver stopped.")
+    } catch {
+      setSyncMessage("Bluetooth receiver could not be stopped.")
+    }
+  }, [])
+
   const scanSyncQr = useCallback(async () => {
     setSyncMessage("")
 
@@ -1049,15 +1381,14 @@ export default function CredStore() {
   )
 
   const verifyLicenseToken = useCallback(async (token: string): Promise<LicenseRecord> => {
+    await assertMonotonicLicenseClock()
+
     const [payloadPart, signaturePart] = token.trim().split(".")
     if (!payloadPart || !signaturePart) throw new Error("License must be payload.signature")
 
-    const storedPublicKeyText = await readStoredValue(LICENSE_PUBLIC_KEY_STORAGE_KEY)
-    const storedPublicKey = storedPublicKeyText ? (JSON.parse(storedPublicKeyText) as JsonWebKey) : null
-    const publicKey = storedPublicKey?.crv === "Ed25519" ? storedPublicKey : defaultLicensePublicKey
     const payloadBytes = new TextEncoder().encode(payloadPart)
     const signature = base64UrlToBytes(signaturePart)
-    const verified = await verifyEd25519(signature, payloadBytes, base64UrlToBytes(publicKey.x || ""))
+    const verified = await verifyEd25519(signature, payloadBytes, getLicensePublicKeyBytes())
     if (!verified) throw new Error("License signature is invalid")
 
     const payload = decodePayload<Omit<LicenseRecord, "token">>(payloadPart)
@@ -1296,7 +1627,7 @@ export default function CredStore() {
                 <DialogHeader>
                   <DialogTitle className="text-sm">Local Device Sync</DialogTitle>
                   <DialogDescription className="text-xs text-gray-400">
-                    Sync encrypted vault data locally with a one-time QR payload. No internet connection is used.
+                    Sync encrypted vault data locally with QR or paired Bluetooth. No internet connection is used.
                   </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-3">
@@ -1367,6 +1698,45 @@ export default function CredStore() {
                       >
                         Generate One-Time QR
                       </Button>
+                      <div className="space-y-2 rounded-md border border-white/10 bg-white/5 p-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-xs font-medium text-white">Bluetooth transfer</p>
+                          <Badge variant={bluetoothAvailable ? "default" : "secondary"} className="text-[10px]">
+                            {bluetoothAvailable ? "Available" : "Unavailable"}
+                          </Badge>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={loadBluetoothDevices}
+                          className="w-full border-white/20 bg-white/5 text-xs text-white hover:bg-white/10"
+                        >
+                          Load Paired Devices
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={sendWebBluetoothSync}
+                          className="w-full border-white/20 bg-white/5 text-xs text-white hover:bg-white/10"
+                        >
+                          Send to Nearby BLE Receiver
+                        </Button>
+                        {bluetoothDevices.length > 0 && (
+                          <div className="grid gap-2">
+                            {bluetoothDevices.map((device) => (
+                              <Button
+                                key={device.id}
+                                type="button"
+                                variant="outline"
+                                onClick={() => sendBluetoothSync(device)}
+                                className="justify-start border-white/20 bg-white/5 text-left text-xs text-white hover:bg-white/10"
+                              >
+                                Send to {device.name || device.id}
+                              </Button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                       <p className="text-xs text-gray-300">
                         Free edition sync limit: {vaultData.metadata?.syncedDevices.length || 1}/{maxSyncDevices} devices.
                       </p>
@@ -1381,6 +1751,22 @@ export default function CredStore() {
                       />
                       <Button onClick={scanSyncQr} className="w-full bg-gradient-to-r from-purple-500 to-blue-500 text-sm">
                         Open Camera and Scan
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={receiveBluetoothSync}
+                        className="w-full border-white/20 bg-white/5 text-xs text-white hover:bg-white/10"
+                      >
+                        Receive via Bluetooth
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={cancelBluetoothReceive}
+                        className="w-full border-white/20 bg-white/5 text-xs text-white hover:bg-white/10"
+                      >
+                        Stop Bluetooth Receiver
                       </Button>
                       <Textarea
                         value={syncImportText}

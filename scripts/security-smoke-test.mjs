@@ -8,13 +8,16 @@ const explicitSourceFiles = [
   "app/layout.tsx",
   "app/page.tsx",
   "electron/main.js",
+  "electron/preload.js",
   "lib/secure-vault.ts",
   "reset-credstore.ts",
   "scripts/postinstall-desktop.js",
   "CHANGELOG.md",
   "android/app/src/main/AndroidManifest.xml",
+  "android/app/build.gradle",
   "android/app/src/main/java/com/credstore/app/MainActivity.java",
   "android/app/src/main/res/xml/network_security_config.xml",
+  "ios/App/App/CredStoreBridgeViewController.swift",
 ]
 
 const sourceFiles = [
@@ -57,9 +60,12 @@ for (const file of sourceFiles) {
 
 const appSource = read("app/page.tsx")
 const electronSource = read("electron/main.js")
+const electronPreload = read("electron/preload.js")
 const layoutSource = read("app/layout.tsx")
 const manifest = read("android/app/src/main/AndroidManifest.xml")
+const androidBuild = read("android/app/build.gradle")
 const mainActivity = read("android/app/src/main/java/com/credstore/app/MainActivity.java")
+const iosBridge = read("ios/App/App/CredStoreBridgeViewController.swift")
 const vaultSource = read("lib/secure-vault.ts")
 
 assert(!/\bfetch\s*\(/.test(appSource), "app/page.tsx must not call fetch")
@@ -69,9 +75,19 @@ assert(layoutSource.includes("connect-src 'none'"), "CSP must block outbound con
 assert(electronSource.includes("onBeforeRequest"), "Electron must install request blocking")
 assert(electronSource.includes("setPermissionRequestHandler"), "Electron must deny runtime permissions")
 assert(electronSource.includes("sandbox: true"), "Electron renderer sandbox must be enabled")
+assert(electronSource.includes("verifyApplicationIntegrity"), "Electron must verify packaged app integrity")
+assert(electronSource.includes("verifyRuntimeEnvironment"), "Electron must install runtime protection checks")
+assert(electronSource.includes("CREDSTORE_SKIP_RASP_CHECKS"), "Electron RASP bypass must be explicit for dev/testing only")
+assert(electronPreload.includes("credstoreNative"), "Electron preload must expose only the controlled native bridge")
 assert(manifest.includes('android:allowBackup="false"'), "Android backup must be disabled")
 assert(manifest.includes('android.permission.INTERNET" tools:node="remove"'), "Android Internet permission must be removed")
+assert(androidBuild.includes("EXPECTED_ANDROID_CERT_SHA256"), "Android release builds must support signing cert pinning")
 assert(mainActivity.includes("FLAG_SECURE"), "Android FLAG_SECURE must be enabled")
+assert(mainActivity.includes("verifyAppSignature"), "Android must verify its release signing certificate when configured")
+assert(mainActivity.includes("verifyRuntimeEnvironment"), "Android must include runtime protection checks")
+assert(iosBridge.includes("verifyRuntimeEnvironment"), "iOS must include release runtime protection checks")
+assert(appSource.includes("licensePublicKeyFragments"), "License public key must not be a plain replaceable setting")
+assert(appSource.includes("assertMonotonicLicenseClock"), "License validation must detect system clock rollback")
 assert(vaultSource.includes("iterations: KDF_ITERATIONS"), "Vault must use configured PBKDF2 iterations")
 assert(vaultSource.includes("additionalData"), "AES-GCM must bind encrypted data to a context")
 

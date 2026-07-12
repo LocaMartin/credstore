@@ -2,6 +2,27 @@
 
 All notable changes to CredStore will be documented in this file.
 
+## [1.0.13] - 2026-07-12
+
+### Added
+
+- Added cross-platform biometric unlock routing for Android/iOS native biometrics and desktop OS prompts.
+- Added local Bluetooth sync transport alongside QR sync: Android paired-device RFCOMM, iOS BLE receiver/sender,
+  and Electron Web Bluetooth sender support.
+- Added release-only Android signing certificate verification using the `EXPECTED_ANDROID_CERT_SHA256` build variable.
+- Added release-only Android and iOS runtime self-protection checks for debugger attachment and common instrumentation/root/jailbreak artifacts.
+- Added offline license clock rollback detection with a persisted last-seen timestamp.
+
+### Security
+
+- Removed the locally replaceable license public-key override and now reconstructs the Ed25519 public key from in-app
+  fragments during verification.
+- Hardened Electron production runtime by disabling production DevTools shortcuts, blocking debugger launch flags, checking
+  Linux `TracerPid`, and preserving SHA-256 packaged asset integrity validation.
+- Documented CredStore's offline security layers: AES-256-GCM vault encryption, PBKDF2 key wrapping, Ed25519 license
+  signatures, OS code signing, SHA-256 asset integrity, biometric key release, CSP, no network permission, and runtime
+  guards.
+
 ## [1.0.12] - 2026-07-11
 
 ### Changed
