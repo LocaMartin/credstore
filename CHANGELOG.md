@@ -2,6 +2,24 @@
 
 All notable changes to CredStore will be documented in this file.
 
+## [1.0.14] - 2026-07-13
+
+### Fixed
+
+- Fixed local sync QR generation reliability by using smaller QR frames and a render boundary so oversized payloads do not
+  crash the WebView.
+- Replaced placeholder QR scanning with camera-based ZXing scanning for sync and license QR codes.
+- Simplified receiver mode to one action: scan the client QR and import the encrypted vault automatically.
+- Removed experimental nearby-device send controls from the sync dialog.
+- Fixed biometric availability fallback so Android can use the custom native plugin when the generic biometric plugin
+  reports unavailable.
+- Fixed the Windows install command documentation to use `winget install credstore`.
+
+### Changed
+
+- Updated sync mode buttons with a clear selected state and tap/click animation.
+- Reduced QR sync copy to show the correct free limit of 5 devices unless a trial or enterprise license is active.
+
 ## [1.0.13] - 2026-07-12
 
 ### Added

@@ -27,7 +27,7 @@
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>CredStore uses Bluetooth to sync encrypted vault data directly between your devices without internet.</string>
 	<key>NSBluetoothPeripheralUsageDescription</key>
-	<string>CredStore advertises a local encrypted sync receiver when you choose Receive via Bluetooth.</string>
+	<string>CredStore uses Bluetooth only for local encrypted sync transport experiments.</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>CredStore uses Face ID or Touch ID to unlock your encrypted vault when you create a biometric master key.</string>
 	<key>UILaunchStoryboardName</key>

@@ -1,7 +1,6 @@
 "use client"
 
-import type React from "react"
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { Component, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { QRCodeCanvas } from "qrcode.react"
 import { Capacitor, registerPlugin } from "@capacitor/core"
 import { AccessControl, NativeBiometric } from "@capgo/capacitor-native-biometric"
@@ -77,18 +76,16 @@ import {
 } from "lucide-react"
 import { ResetCredStore } from "@/components/reset-button"
 
-const APP_VERSION = "1.0.13"
+const APP_VERSION = "1.0.14"
 const MAX_UNLOCK_DELAY_MS = 30000
 const MAX_FAILED_UNLOCKS = 10
 const FREE_SYNC_DEVICE_LIMIT = 5
-const SYNC_FRAME_CHUNK_SIZE = 850
+const SYNC_FRAME_CHUNK_SIZE = 240
 const LOCKOUT_STORAGE_KEY = "credstore_lockout_until"
 const INSTALLATION_ID_STORAGE_KEY = "credstore_installation_id"
 const CREDSTORE_DEEPLINK_SCHEME = "credstore"
 const RUNTIME_LOGO_PATH = "./logo.svg"
 const LICENSE_CLOCK_STORAGE_KEY = "credstore_license_last_seen_at"
-const BLE_SYNC_SERVICE_UUID = "1e89b6a8-0f62-4ce8-9478-83d94d4aa83a"
-const BLE_SYNC_CHARACTERISTIC_UUID = "e3f63ac1-890a-4f95-8c95-2d37e66b0872"
 
 ed25519Hashes.sha512Async = async (message) =>
   new Uint8Array(await crypto.subtle.digest("SHA-512", new Uint8Array(message).buffer))
@@ -99,43 +96,31 @@ type CredStoreBiometricPlugin = {
   getSecret: (options: { slotId: string; encrypted: string; iv: string }) => Promise<{ secret: string }>
 }
 
-type BluetoothDevice = {
-  id: string
-  name?: string
-}
-
-type CredStoreBluetoothPlugin = {
-  requestBluetoothPermissions?: () => Promise<{ granted: boolean }>
-  isAvailable: () => Promise<{ available: boolean; code?: string; message?: string }>
-  listBondedDevices: () => Promise<{ devices: BluetoothDevice[] }>
-  startReceiver: () => Promise<{ payload: string }>
-  sendPayload: (options: { deviceId: string; payload: string }) => Promise<void>
-  stopReceiver: () => Promise<void>
-}
-
-type BluetoothRemoteGATTCharacteristic = {
-  writeValueWithResponse?: (value: BufferSource) => Promise<void>
-  writeValue: (value: BufferSource) => Promise<void>
-}
-
-type BluetoothRemoteGATTService = {
-  getCharacteristic: (characteristic: string) => Promise<BluetoothRemoteGATTCharacteristic>
-}
-
-type BluetoothRemoteGATTServer = {
-  connected: boolean
-  connect: () => Promise<BluetoothRemoteGATTServer>
-  disconnect: () => void
-  getPrimaryService: (service: string) => Promise<BluetoothRemoteGATTService>
-}
-
-type BluetoothBrowserDevice = {
-  name?: string
-  gatt?: BluetoothRemoteGATTServer
-}
-
 const CredStoreBiometric = registerPlugin<CredStoreBiometricPlugin>("CredStoreBiometric")
-const CredStoreBluetooth = registerPlugin<CredStoreBluetoothPlugin>("CredStoreBluetooth")
+
+class QrRenderBoundary extends Component<{ children: ReactNode; onError: () => void }, { failed: boolean }> {
+  state = { failed: false }
+
+  static getDerivedStateFromError() {
+    return { failed: true }
+  }
+
+  componentDidCatch() {
+    this.props.onError()
+  }
+
+  render() {
+    if (this.state.failed) {
+      return (
+        <div className="grid min-h-[220px] place-items-center rounded-md border border-red-400/30 bg-red-950/10 p-4 text-sm text-red-900">
+          QR payload is too large. Generate a new one-time QR.
+        </div>
+      )
+    }
+
+    return this.props.children
+  }
+}
 
 const THEMES: Record<ThemeName, string> = {
   indigo: "from-purple-900 via-blue-900 to-indigo-900",
@@ -170,13 +155,6 @@ declare global {
     }
     credstoreNative?: {
       biometric: CredStoreBiometricPlugin
-      bluetooth?: {
-        isAvailable: () => Promise<{ available: boolean; code?: string; message?: string }>
-        listBondedDevices?: () => Promise<{ devices: BluetoothDevice[] }>
-        startReceiver?: () => Promise<{ payload: string }>
-        sendPayload?: (options: { deviceId: string; payload: string }) => Promise<void>
-        stopReceiver?: () => Promise<void>
-      }
     }
   }
 }
@@ -267,21 +245,6 @@ function createSyncFrames(vault: VaultRecord) {
   )
 }
 
-function createBluetoothSyncChunks(payload: string) {
-  const chunkSize = 360
-  const total = Math.max(1, Math.ceil(payload.length / chunkSize))
-
-  return Array.from({ length: total }, (_, index) =>
-    new TextEncoder().encode(
-      JSON.stringify({
-        i: index,
-        t: total,
-        d: payload.slice(index * chunkSize, (index + 1) * chunkSize),
-      }),
-    ),
-  )
-}
-
 async function assertMonotonicLicenseClock() {
   const now = Date.now()
   const storedLastSeen = Number(await readStoredValue(LICENSE_CLOCK_STORAGE_KEY))
@@ -320,19 +283,32 @@ async function getBiometricAvailability(): Promise<BiometricAvailability> {
   }
 
   if (Capacitor.isNativePlatform()) {
+    const platform = Capacitor.getPlatform()
+    if (platform === "android") {
+      try {
+        const nativeResult = await CredStoreBiometric.isAvailable()
+        if (nativeResult.available) return nativeResult
+      } catch {
+        // Try the package plugin below; some builds only expose one biometric bridge.
+      }
+    }
+
     try {
-      const result = await NativeBiometric.isAvailable({ useFallback: false })
-      return {
-        available: result.isAvailable && (result.strongBiometryIsAvailable || result.biometryType !== 0),
+      const result = await NativeBiometric.isAvailable({ useFallback: true })
+      const packageResult = {
+        available: result.isAvailable,
         code: result.errorCode ? String(result.errorCode) : result.isAvailable ? "AVAILABLE" : "UNAVAILABLE",
         message: result.isAvailable ? "Native biometric unlock is available." : "Native biometric unlock is unavailable.",
       }
+      if (packageResult.available || platform !== "android") return packageResult
     } catch {
-      try {
-        return await CredStoreBiometric.isAvailable()
-      } catch {
-        return { available: false, code: "PLUGIN_UNAVAILABLE" }
-      }
+      // Fall through to the custom plugin.
+    }
+
+    try {
+      return await CredStoreBiometric.isAvailable()
+    } catch {
+      return { available: false, code: "PLUGIN_UNAVAILABLE" }
     }
   }
 
@@ -395,30 +371,57 @@ async function getBiometricSecret(slotId: string, biometricKey: BiometricKey): P
   return result.secret
 }
 
-async function getBluetoothAvailability() {
-  if (typeof window !== "undefined" && window.credstoreNative?.bluetooth) {
-    return window.credstoreNative.bluetooth.isAvailable()
+async function scanQrFromVideo(video: HTMLVideoElement, timeoutMs = 30000) {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    throw new Error("Camera is not available in this build.")
   }
 
-  if (Capacitor.isNativePlatform()) {
-    try {
-      return await CredStoreBluetooth.isAvailable()
-    } catch {
-      return { available: false, code: "PLUGIN_UNAVAILABLE", message: "Native Bluetooth plugin is unavailable." }
+  const { BrowserQRCodeReader } = await import("@zxing/browser")
+  const reader = new BrowserQRCodeReader(undefined, {
+    delayBetweenScanAttempts: 250,
+    delayBetweenScanSuccess: 250,
+  })
+
+  return await new Promise<string>((resolve, reject) => {
+    let controls: { stop: () => void } | null = null
+    let settled = false
+
+    const stop = () => {
+      controls?.stop()
+      video.pause()
+      video.removeAttribute("src")
+      video.srcObject = null
     }
-  }
 
-  return {
-    available: false,
-    code: "PLUGIN_UNAVAILABLE",
-    message: "Bluetooth sync requires the native desktop or mobile build.",
-  }
-}
+    const finish = (value: string) => {
+      if (settled) return
+      settled = true
+      window.clearTimeout(timeout)
+      stop()
+      resolve(value)
+    }
 
-async function ensureBluetoothPermissions() {
-  if (!Capacitor.isNativePlatform()) return true
-  const result = await CredStoreBluetooth.requestBluetoothPermissions?.()
-  return result?.granted !== false
+    const fail = (error: Error) => {
+      if (settled) return
+      settled = true
+      window.clearTimeout(timeout)
+      stop()
+      reject(error)
+    }
+
+    const timeout = window.setTimeout(() => fail(new Error("No QR code detected. Try again.")), timeoutMs)
+
+    reader
+      .decodeFromConstraints({ video: { facingMode: { ideal: "environment" } } }, video, (result, _error, scannerControls) => {
+        controls = scannerControls
+        const text = result?.getText()
+        if (text) finish(text)
+      })
+      .then((scannerControls) => {
+        controls = scannerControls
+      })
+      .catch((error: Error) => fail(error))
+  })
 }
 
 function isSyncFrame(value: unknown): value is CredStoreSyncFrame {
@@ -618,10 +621,7 @@ export default function CredStore() {
   const [syncPayload, setSyncPayload] = useState("")
   const [syncFrames, setSyncFrames] = useState<string[]>([])
   const [syncFrameIndex, setSyncFrameIndex] = useState(0)
-  const [syncImportText, setSyncImportText] = useState("")
   const [syncMessage, setSyncMessage] = useState("")
-  const [bluetoothAvailable, setBluetoothAvailable] = useState(false)
-  const [bluetoothDevices, setBluetoothDevices] = useState<BluetoothDevice[]>([])
   const [vaultData, setVaultData] = useState<VaultData>(normalizeVaultData(null))
   const [licenseToken, setLicenseToken] = useState("")
   const [licenseMessage, setLicenseMessage] = useState("")
@@ -643,6 +643,10 @@ export default function CredStore() {
   const isUnlockDelayed = unlockDelayRemaining > 0
   const biometricAvailable = biometricAvailability.available
   const maxSyncDevices = activeLicense?.maxDevices || FREE_SYNC_DEVICE_LIMIT
+  const syncDeviceCount = vaultData.metadata?.syncedDevices.length || 1
+  const syncLimitLabel = activeLicense
+    ? `${activeLicense.kind === "trial" ? "Trial" : "Enterprise"} sync limit: ${syncDeviceCount}/${maxSyncDevices} devices.`
+    : `Free edition sync limit: ${syncDeviceCount}/${FREE_SYNC_DEVICE_LIMIT} devices.`
 
   const persistVault = useCallback(
     async (
@@ -712,13 +716,6 @@ export default function CredStore() {
         setBiometricAvailability(result)
       } catch {
         setBiometricAvailability({ available: false, code: "PLUGIN_UNAVAILABLE" })
-      }
-
-      try {
-        const result = await getBluetoothAvailability()
-        setBluetoothAvailable(result.available)
-      } catch {
-        setBluetoothAvailable(false)
       }
 
       setIsLocked(true)
@@ -1119,115 +1116,13 @@ export default function CredStore() {
     )
   }, [maxSyncDevices, vaultData.metadata?.syncedDevices.length, vaultRecord])
 
-  const loadBluetoothDevices = useCallback(async () => {
-    setSyncMessage("Checking Bluetooth...")
-    try {
-      if (!(await ensureBluetoothPermissions())) {
-        setSyncMessage("Bluetooth permission was denied.")
-        setBluetoothAvailable(false)
-        return
-      }
-
-      const availability = await getBluetoothAvailability()
-      setBluetoothAvailable(availability.available)
-      if (!availability.available) {
-        setSyncMessage(availability.message || "Bluetooth is not available or not enabled.")
-        return
-      }
-
-      if (!Capacitor.isNativePlatform()) {
-        setSyncMessage("Desktop Bluetooth transfer still needs a native desktop adapter. Use QR sync on desktop for now.")
-        return
-      }
-
-      const result = await CredStoreBluetooth.listBondedDevices()
-      setBluetoothDevices(result.devices || [])
-      setSyncMessage(
-        result.devices.length
-          ? "Paired Bluetooth devices loaded. Pick the receiver device."
-          : "No paired Bluetooth devices found. Pair both devices in system Bluetooth settings first.",
-      )
-    } catch (error) {
-      setSyncMessage(error instanceof Error ? error.message : "Bluetooth device lookup failed.")
-    }
-  }, [])
-
-  const sendBluetoothSync = useCallback(
-    async (device: BluetoothDevice) => {
-      if (!vaultRecord) return
-      const deviceCount = vaultData.metadata?.syncedDevices.length || 1
-      if (deviceCount >= maxSyncDevices) {
-        setSyncMessage(`Device sync limit reached (${deviceCount}/${maxSyncDevices}). Add an enterprise license to sync more devices.`)
-        return
-      }
-
-      try {
-        if (!(await ensureBluetoothPermissions())) {
-          setSyncMessage("Bluetooth permission was denied.")
-          return
-        }
-
-        if (!Capacitor.isNativePlatform()) {
-          setSyncMessage("Desktop Bluetooth transfer still needs a native desktop adapter. Use QR sync on desktop for now.")
-          return
-        }
-
-        setSyncMessage(`Sending encrypted vault to ${device.name || device.id}...`)
-        await CredStoreBluetooth.sendPayload({ deviceId: device.id, payload: createSyncPayload(vaultRecord) })
-        setSyncMessage(`Bluetooth sync sent to ${device.name || device.id}.`)
-      } catch (error) {
-        setSyncMessage(error instanceof Error ? error.message : "Bluetooth send failed.")
-      }
-    },
-    [maxSyncDevices, vaultData.metadata?.syncedDevices.length, vaultRecord],
-  )
-
-  const sendWebBluetoothSync = useCallback(async () => {
-    if (!vaultRecord) return
-    const deviceCount = vaultData.metadata?.syncedDevices.length || 1
-    if (deviceCount >= maxSyncDevices) {
-      setSyncMessage(`Device sync limit reached (${deviceCount}/${maxSyncDevices}). Add an enterprise license to sync more devices.`)
-      return
-    }
-
-    if (!navigator.bluetooth?.requestDevice) {
-      setSyncMessage("Web Bluetooth is not available in this desktop build. Use QR sync or Android paired Bluetooth.")
-      return
-    }
-
-    let server: BluetoothRemoteGATTServer | null = null
-    try {
-      setSyncMessage("Pick a nearby CredStore BLE receiver...")
-      const device = await navigator.bluetooth.requestDevice({
-        filters: [{ services: [BLE_SYNC_SERVICE_UUID] }],
-        optionalServices: [BLE_SYNC_SERVICE_UUID],
-      })
-      if (!device.gatt) throw new Error("Bluetooth GATT is unavailable for this receiver.")
-
-      server = await device.gatt.connect()
-      const service = await server.getPrimaryService(BLE_SYNC_SERVICE_UUID)
-      const characteristic = await service.getCharacteristic(BLE_SYNC_CHARACTERISTIC_UUID)
-      const chunks = createBluetoothSyncChunks(createSyncPayload(vaultRecord))
-
-      setSyncMessage(`Sending ${chunks.length} Bluetooth chunks to ${device.name || "CredStore receiver"}...`)
-      for (const chunk of chunks) {
-        if (characteristic.writeValueWithResponse) {
-          await characteristic.writeValueWithResponse(chunk)
-        } else {
-          await characteristic.writeValue(chunk)
-        }
-      }
-
-      setSyncMessage(`Bluetooth sync sent to ${device.name || "CredStore receiver"}.`)
-    } catch (error) {
-      setSyncMessage(error instanceof Error ? error.message : "Web Bluetooth send failed.")
-    } finally {
-      if (server?.connected) server.disconnect()
-    }
-  }, [maxSyncDevices, vaultData.metadata?.syncedDevices.length, vaultRecord])
+  useEffect(() => {
+    if (!isSyncOpen || syncMode !== "client" || syncPayload) return
+    createSyncCode()
+  }, [createSyncCode, isSyncOpen, syncMode, syncPayload])
 
   const importSyncPayload = useCallback(
-    async (payload = syncImportText) => {
+    async (payload: string) => {
       try {
         const trimmed = payload.trim()
         const parsed = decodePayload<
@@ -1249,7 +1144,6 @@ export default function CredStore() {
           const receivedCount = frames.filter(Boolean).length
           if (receivedCount < parsed.total) {
             setSyncMessage(`Received frame ${parsed.index + 1}/${parsed.total}. ${parsed.total - receivedCount} remaining.`)
-            setSyncImportText("")
             return
           }
 
@@ -1273,7 +1167,6 @@ export default function CredStore() {
 
           await writeStoredValue(VAULT_STORAGE_KEY, JSON.stringify(fullPayload.vault))
           setSyncMessage("All QR frames imported. Locking now; unlock with one of the synced master keys.")
-          setSyncImportText("")
           lockVault()
           return
         }
@@ -1288,84 +1181,25 @@ export default function CredStore() {
 
         await writeStoredValue(VAULT_STORAGE_KEY, JSON.stringify(parsed.vault))
         setSyncMessage("Vault imported. Locking now; unlock with one of the synced master keys.")
-        setSyncImportText("")
         lockVault()
       } catch {
         setSyncMessage("Invalid, incomplete, or unreadable sync QR frame.")
       }
     },
-    [lockVault, syncImportText],
+    [lockVault],
   )
-
-  const receiveBluetoothSync = useCallback(async () => {
-    setSyncMessage("Waiting for Bluetooth sync...")
-    try {
-      if (!(await ensureBluetoothPermissions())) {
-        setSyncMessage("Bluetooth permission was denied.")
-        return
-      }
-
-      if (!Capacitor.isNativePlatform()) {
-        setSyncMessage("Desktop Bluetooth transfer still needs a native desktop adapter. Use QR sync on desktop for now.")
-        return
-      }
-
-      const result = await CredStoreBluetooth.startReceiver()
-      await importSyncPayload(result.payload)
-    } catch (error) {
-      setSyncMessage(error instanceof Error ? error.message : "Bluetooth receive failed.")
-    }
-  }, [importSyncPayload])
-
-  const cancelBluetoothReceive = useCallback(async () => {
-    try {
-      if (Capacitor.isNativePlatform()) await CredStoreBluetooth.stopReceiver()
-      setSyncMessage("Bluetooth receiver stopped.")
-    } catch {
-      setSyncMessage("Bluetooth receiver could not be stopped.")
-    }
-  }, [])
 
   const scanSyncQr = useCallback(async () => {
     setSyncMessage("")
 
-    const BarcodeDetectorCtor = (window as unknown as {
-      BarcodeDetector?: new (options: { formats: string[] }) => {
-        detect: (source: HTMLVideoElement) => Promise<Array<{ rawValue?: string }>>
-      }
-    }).BarcodeDetector
-
-    if (!BarcodeDetectorCtor || !navigator.mediaDevices?.getUserMedia) {
-      setSyncMessage("Camera QR scanning is not available here. Paste the QR payload instead.")
-      return
-    }
-
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
       const video = scanVideoRef.current
       if (!video) return
-
-      video.srcObject = stream
-      await video.play()
-
-      const detector = new BarcodeDetectorCtor({ formats: ["qr_code"] })
-      const deadline = Date.now() + 30000
-
-      while (Date.now() < deadline) {
-        const results = await detector.detect(video)
-        const rawValue = results[0]?.rawValue
-        if (rawValue) {
-          stream.getTracks().forEach((track) => track.stop())
-          await importSyncPayload(rawValue)
-          return
-        }
-        await new Promise((resolve) => window.setTimeout(resolve, 350))
-      }
-
-      stream.getTracks().forEach((track) => track.stop())
-      setSyncMessage("No QR code detected. Try again or paste the QR payload.")
-    } catch {
-      setSyncMessage("Camera access failed. Paste the QR payload instead.")
+      setSyncMessage("Point the camera at the CredStore QR code.")
+      const rawValue = await scanQrFromVideo(video)
+      await importSyncPayload(rawValue)
+    } catch (error) {
+      setSyncMessage(error instanceof Error ? error.message : "Camera QR scanning failed.")
     }
   }, [importSyncPayload])
 
@@ -1413,44 +1247,15 @@ export default function CredStore() {
   const scanLicenseQr = useCallback(async () => {
     setLicenseMessage("")
 
-    const BarcodeDetectorCtor = (window as unknown as {
-      BarcodeDetector?: new (options: { formats: string[] }) => {
-        detect: (source: HTMLVideoElement) => Promise<Array<{ rawValue?: string }>>
-      }
-    }).BarcodeDetector
-
-    if (!BarcodeDetectorCtor || !navigator.mediaDevices?.getUserMedia) {
-      setLicenseMessage("Camera QR scanning is not available here. Paste the license token instead.")
-      return
-    }
-
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
       const video = licenseScanVideoRef.current
       if (!video) return
-
-      video.srcObject = stream
-      await video.play()
-
-      const detector = new BarcodeDetectorCtor({ formats: ["qr_code"] })
-      const deadline = Date.now() + 30000
-
-      while (Date.now() < deadline) {
-        const results = await detector.detect(video)
-        const rawValue = results[0]?.rawValue
-        if (rawValue) {
-          stream.getTracks().forEach((track) => track.stop())
-          setLicenseToken(rawValue.trim())
-          setLicenseMessage("License QR scanned. Press Validate Offline License.")
-          return
-        }
-        await new Promise((resolve) => window.setTimeout(resolve, 350))
-      }
-
-      stream.getTracks().forEach((track) => track.stop())
-      setLicenseMessage("No license QR detected. Try again or paste the token.")
-    } catch {
-      setLicenseMessage("Camera access failed. Paste the license token instead.")
+      setLicenseMessage("Point the camera at the license QR code.")
+      const rawValue = await scanQrFromVideo(video)
+      setLicenseToken(rawValue.trim())
+      setLicenseMessage("License QR scanned. Press Validate Offline License.")
+    } catch (error) {
+      setLicenseMessage(error instanceof Error ? error.message : "Camera license QR scanning failed.")
     }
   }, [])
 
@@ -1627,7 +1432,7 @@ export default function CredStore() {
                 <DialogHeader>
                   <DialogTitle className="text-sm">Local Device Sync</DialogTitle>
                   <DialogDescription className="text-xs text-gray-400">
-                    Sync encrypted vault data locally with QR or paired Bluetooth. No internet connection is used.
+                    Sync encrypted vault data locally with QR. No internet connection is used.
                   </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-3">
@@ -1635,16 +1440,31 @@ export default function CredStore() {
                     <Button
                       type="button"
                       variant={syncMode === "client" ? "default" : "outline"}
-                      onClick={() => setSyncMode("client")}
-                      className="text-xs"
+                      onClick={() => {
+                        setSyncMode("client")
+                        setSyncMessage("")
+                        if (!syncPayload) createSyncCode()
+                      }}
+                      className={`text-xs transition-all active:scale-95 ${
+                        syncMode === "client"
+                          ? "bg-gradient-to-r from-purple-500 to-blue-500 text-white shadow-lg ring-2 ring-white/50"
+                          : "border-white/20 bg-white/5 text-white hover:bg-white/10"
+                      }`}
                     >
                       Client
                     </Button>
                     <Button
                       type="button"
                       variant={syncMode === "receiver" ? "default" : "outline"}
-                      onClick={() => setSyncMode("receiver")}
-                      className="text-xs"
+                      onClick={() => {
+                        setSyncMode("receiver")
+                        setSyncMessage("Receiver ready. Tap Open Camera and Scan.")
+                      }}
+                      className={`text-xs transition-all active:scale-95 ${
+                        syncMode === "receiver"
+                          ? "bg-gradient-to-r from-purple-500 to-blue-500 text-white shadow-lg ring-2 ring-white/50"
+                          : "border-white/20 bg-white/5 text-white hover:bg-white/10"
+                      }`}
                     >
                       Receiver
                     </Button>
@@ -1653,18 +1473,12 @@ export default function CredStore() {
                     <div className="space-y-3">
                       <div className="rounded-md border border-white/10 bg-white p-4 text-center text-black">
                         {syncPayload ? (
-                          <QRCodeCanvas
-                            value={syncPayload}
-                            size={220}
-                            level="H"
-                            includeMargin
-                            imageSettings={{
-                              src: RUNTIME_LOGO_PATH,
-                              height: 42,
-                              width: 42,
-                              excavate: true,
-                            }}
-                          />
+                          <QrRenderBoundary
+                            key={syncPayload}
+                            onError={() => setSyncMessage("QR generation failed. Generate a new one-time QR.")}
+                          >
+                            <QRCodeCanvas value={syncPayload} size={220} level="L" includeMargin />
+                          </QrRenderBoundary>
                         ) : (
                           <QrCode className="mx-auto h-24 w-24 text-gray-500" />
                         )}
@@ -1698,47 +1512,14 @@ export default function CredStore() {
                       >
                         Generate One-Time QR
                       </Button>
-                      <div className="space-y-2 rounded-md border border-white/10 bg-white/5 p-3">
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="text-xs font-medium text-white">Bluetooth transfer</p>
-                          <Badge variant={bluetoothAvailable ? "default" : "secondary"} className="text-[10px]">
-                            {bluetoothAvailable ? "Available" : "Unavailable"}
-                          </Badge>
-                        </div>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={loadBluetoothDevices}
-                          className="w-full border-white/20 bg-white/5 text-xs text-white hover:bg-white/10"
-                        >
-                          Load Paired Devices
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={sendWebBluetoothSync}
-                          className="w-full border-white/20 bg-white/5 text-xs text-white hover:bg-white/10"
-                        >
-                          Send to Nearby BLE Receiver
-                        </Button>
-                        {bluetoothDevices.length > 0 && (
-                          <div className="grid gap-2">
-                            {bluetoothDevices.map((device) => (
-                              <Button
-                                key={device.id}
-                                type="button"
-                                variant="outline"
-                                onClick={() => sendBluetoothSync(device)}
-                                className="justify-start border-white/20 bg-white/5 text-left text-xs text-white hover:bg-white/10"
-                              >
-                                Send to {device.name || device.id}
-                              </Button>
-                            ))}
-                          </div>
-                        )}
+                      <div className="rounded-md border border-white/10 bg-white/5 p-3">
+                        <p className="text-xs text-gray-300">
+                          Open receiver mode on the other device and scan this QR. CredStore imports the encrypted vault
+                          automatically after every required frame is scanned.
+                        </p>
                       </div>
                       <p className="text-xs text-gray-300">
-                        Free edition sync limit: {vaultData.metadata?.syncedDevices.length || 1}/{maxSyncDevices} devices.
+                        {syncLimitLabel}
                       </p>
                     </div>
                   ) : (
@@ -1752,36 +1533,9 @@ export default function CredStore() {
                       <Button onClick={scanSyncQr} className="w-full bg-gradient-to-r from-purple-500 to-blue-500 text-sm">
                         Open Camera and Scan
                       </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={receiveBluetoothSync}
-                        className="w-full border-white/20 bg-white/5 text-xs text-white hover:bg-white/10"
-                      >
-                        Receive via Bluetooth
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={cancelBluetoothReceive}
-                        className="w-full border-white/20 bg-white/5 text-xs text-white hover:bg-white/10"
-                      >
-                        Stop Bluetooth Receiver
-                      </Button>
-                      <Textarea
-                        value={syncImportText}
-                        onChange={(event) => setSyncImportText(event.target.value)}
-                        className="min-h-[72px] border-white/20 bg-white/5 text-xs text-white"
-                        placeholder="Or paste QR payload here"
-                      />
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => importSyncPayload()}
-                        className="w-full border-white/20 bg-white/5 text-xs text-white hover:bg-white/10"
-                      >
-                        Import Pasted Payload
-                      </Button>
+                      <p className="text-xs text-gray-300">
+                        Scan the client QR. CredStore imports the encrypted vault automatically after a valid QR is read.
+                      </p>
                     </div>
                   )}
                   {syncMessage && <p className="text-xs text-gray-300">{syncMessage}</p>}
