@@ -14,6 +14,16 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 
+const resetKeys = [
+  "credstore_vault_v2",
+  "credstore_data",
+  "credstore_lockout_until",
+  "credstore_installation_id",
+  "credstore_theme",
+  "credstore_license",
+  "credstore_license_last_seen_at",
+]
+
 export function ResetCredStore() {
   const [isResetting, setIsResetting] = useState(false)
 
@@ -23,16 +33,12 @@ export function ResetCredStore() {
       try {
         try {
           const { Preferences } = await import("@capacitor/preferences")
-          await Preferences.remove({ key: "credstore_vault_v2" })
-          await Preferences.remove({ key: "credstore_data" })
-          await Preferences.remove({ key: "credstore_lockout_until" })
+          await Promise.all(resetKeys.map((key) => Preferences.remove({ key })))
         } catch {
           // Web and Electron fall back to localStorage.
         }
 
-        localStorage.removeItem("credstore_vault_v2")
-        localStorage.removeItem("credstore_data")
-        localStorage.removeItem("credstore_lockout_until")
+        resetKeys.forEach((key) => localStorage.removeItem(key))
 
         window.location.reload()
       } catch (error) {

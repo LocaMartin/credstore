@@ -4,6 +4,7 @@ const fs = require("fs")
 const crypto = require("crypto")
 const { spawn } = require("child_process")
 const isDev = process.env.NODE_ENV === "development"
+const isDebug = isDev || process.env.CREDSTORE_DEBUG === "1"
 
 app.commandLine.appendSwitch("enable-features", "WebBluetooth")
 
@@ -40,7 +41,7 @@ function createWindow() {
   })
 
   mainWindow.setContentProtection(true)
-  if (!isDev) {
+  if (!isDebug) {
     mainWindow.webContents.on("devtools-opened", () => {
       mainWindow.webContents.closeDevTools()
     })
@@ -91,7 +92,7 @@ function createWindow() {
     },
     {
       label: "View",
-      submenu: isDev
+      submenu: isDebug
         ? [
             { role: "reload" },
             { role: "forceReload" },
@@ -120,7 +121,7 @@ function createWindow() {
   const menu = Menu.buildFromTemplate(template)
   Menu.setApplicationMenu(menu)
 
-  if (isDev) {
+  if (isDebug) {
     mainWindow.loadURL("http://localhost:3000")
     mainWindow.webContents.openDevTools()
   } else {
@@ -130,7 +131,7 @@ function createWindow() {
   mainWindow.once("ready-to-show", () => {
     mainWindow.show()
 
-    if (isDev) {
+    if (isDebug) {
       mainWindow.webContents.openDevTools()
     }
   })
@@ -396,7 +397,7 @@ function failIntegrityCheck(reason) {
 }
 
 function verifyRuntimeEnvironment() {
-  if (isDev || process.env.CREDSTORE_SKIP_RASP_CHECKS === "1") return
+  if (isDev || isDebug || process.env.CREDSTORE_SKIP_RASP_CHECKS === "1") return
 
   const debugFlags = [...process.execArgv, ...process.argv].join(" ")
   if (/--inspect|--inspect-brk|--remote-debugging-port|--remote-debugging-pipe/i.test(debugFlags)) {
@@ -439,7 +440,7 @@ function isAllowedLocalUrl(url) {
       return false
     }
   }
-  if (!isDev) return false
+  if (!isDebug) return false
 
   try {
     const parsedUrl = new URL(url)
@@ -472,7 +473,7 @@ app.on("web-contents-created", (event, contents) => {
 
 // Handle certificate errors
 app.on("certificate-error", (event, webContents, url, error, certificate, callback) => {
-  if (isDev) {
+  if (isDebug) {
     // In development, ignore certificate errors
     event.preventDefault()
     callback(true)

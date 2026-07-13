@@ -7,8 +7,9 @@ const path = require("path")
 const pkg = require("../package.json")
 
 const args = process.argv.slice(2)
+const debugMode = args.includes("-debug") || args.includes("--debug")
 
-if (args.includes("--version") || args.includes("-v")) {
+if (args.includes("--version") || args.includes("-version") || args.includes("-v")) {
   console.log(pkg.version)
   process.exit(0)
 }
@@ -24,6 +25,8 @@ Usage:
                        Add CredStore to the Linux app launcher
   credstore --uninstall-desktop
                        Remove CredStore from the Linux app launcher
+  credstore -debug     Launch with debug logging and developer tools
+  credstore -version   Print the installed version
   credstore --version  Print the installed version
   credstore --help     Show this help
 `)
@@ -89,6 +92,8 @@ const appArgs = []
 for (const arg of args) {
   if (arg === "--no-sandbox") {
     electronArgs.push(arg)
+  } else if (arg === "-debug" || arg === "--debug") {
+    appArgs.push("--credstore-debug")
   } else {
     appArgs.push(arg)
   }
@@ -110,6 +115,8 @@ async function launch() {
     env: {
       ...process.env,
       NODE_ENV: "production",
+      CREDSTORE_DEBUG: debugMode ? "1" : process.env.CREDSTORE_DEBUG,
+      CREDSTORE_SKIP_RASP_CHECKS: debugMode ? "1" : process.env.CREDSTORE_SKIP_RASP_CHECKS,
     },
   })
 

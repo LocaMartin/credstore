@@ -64,6 +64,10 @@ public class CredStoreBiometricPlugin extends Plugin {
                     @Override
                     public void onAuthenticationSucceeded(@NonNull BiometricPrompt.AuthenticationResult result) {
                         try {
+                            if (result.getCryptoObject() == null || result.getCryptoObject().getCipher() == null) {
+                                call.reject("Biometric crypto context is unavailable");
+                                return;
+                            }
                             Cipher authedCipher = result.getCryptoObject().getCipher();
                             byte[] encrypted = authedCipher.doFinal(secret.getBytes(StandardCharsets.UTF_8));
                             JSObject response = new JSObject();
@@ -107,6 +111,10 @@ public class CredStoreBiometricPlugin extends Plugin {
                     @Override
                     public void onAuthenticationSucceeded(@NonNull BiometricPrompt.AuthenticationResult result) {
                         try {
+                            if (result.getCryptoObject() == null || result.getCryptoObject().getCipher() == null) {
+                                call.reject("Biometric crypto context is unavailable");
+                                return;
+                            }
                             Cipher authedCipher = result.getCryptoObject().getCipher();
                             byte[] decrypted = authedCipher.doFinal(Base64.decode(encrypted, Base64.NO_WRAP));
                             JSObject response = new JSObject();
@@ -141,15 +149,17 @@ public class CredStoreBiometricPlugin extends Plugin {
 
         FragmentActivity activity = (FragmentActivity) bridgeActivity;
         Executor executor = ContextCompat.getMainExecutor(activity);
-        BiometricPrompt prompt = new BiometricPrompt(activity, executor, callback);
-        BiometricPrompt.PromptInfo promptInfo = new BiometricPrompt.PromptInfo.Builder()
-            .setTitle(title)
-            .setSubtitle(subtitle)
-            .setAllowedAuthenticators(AUTHENTICATORS)
-            .setNegativeButtonText("Cancel")
-            .build();
+        activity.runOnUiThread(() -> {
+            BiometricPrompt prompt = new BiometricPrompt(activity, executor, callback);
+            BiometricPrompt.PromptInfo promptInfo = new BiometricPrompt.PromptInfo.Builder()
+                .setTitle(title)
+                .setSubtitle(subtitle)
+                .setAllowedAuthenticators(AUTHENTICATORS)
+                .setNegativeButtonText("Cancel")
+                .build();
 
-        prompt.authenticate(promptInfo, new BiometricPrompt.CryptoObject(cipher));
+            prompt.authenticate(promptInfo, new BiometricPrompt.CryptoObject(cipher));
+        });
     }
 
     private Cipher createCipher(String slotId, int mode, byte[] iv) throws Exception {

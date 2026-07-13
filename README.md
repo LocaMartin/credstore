@@ -4,7 +4,7 @@
   <img src="./.res/text.svg" alt="CredStore">
 </div>
 
-<p align="center"><b>1.0.15</b></p>
+<p align="center"><b>1.0.16</b></p>
 
 CredStore is a strictly offline personal credential manager for desktop, web, and Android.
 
@@ -27,17 +27,17 @@ CredStore is a strictly offline personal credential manager for desktop, web, an
 
 ```bash
 npm install -g credstore
-credstore
 ```
 
 On Linux, the desktop launcher is installed automatically during package installation when npm allows install scripts.
 If install scripts are blocked, `credstore` still launches by caching Electron in the current user's cache directory.
+Use `credstore -version` to print the installed version and `credstore -debug` to launch with debug logging and developer
+tools enabled.
 
 ### GitHub
 
 ```bash
 npm install -g github.com:LocaMartin/credstore
-credstore
 ```
 
 ### Windows
@@ -239,7 +239,8 @@ localStorage.removeItem("credstore_lockout_until");
 location.reload();
 ```
 
-On Android, reset also clears Capacitor Preferences through the app UI.
+On Android, reset also clears Capacitor Preferences through the app UI. Android backup/device-transfer rules and the
+Windows NSIS uninstaller are configured to erase app data on uninstall, so reinstalling starts from a clean vault state.
 
 ## Tests
 

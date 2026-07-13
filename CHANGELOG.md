@@ -2,6 +2,19 @@
 
 All notable changes to CredStore will be documented in this file.
 
+## [1.0.16] - 2026-07-13
+
+### Bug Fix
+
+- Reset app data on uninstall so previous authentication data does not survive reinstall.
+- Add fingerprint and Face ID progress/check animations during registration and login.
+- Fix Android biometric crashes when fingerprint or Face ID actions are tapped.
+- Add sync-complete animation with synced device name and ID.
+- Merge synced data instead of replacing the receiver vault.
+- Add long-press selection for one-by-one or select-all sync.
+- Add long-press selection for one-by-one or select-all delete.
+- Add `-version` and `-debug` flags to the CredStore CLI.
+
 ## [1.0.15] - 2026-07-13
 
 ### Changed
