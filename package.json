@@ -1,6 +1,6 @@
 {
   "name": "credstore",
-  "version": "1.0.16",
+  "version": "1.0.17",
   "private": false,
   "description": "Secure Offline Credential Manager",
   "license": "MIT",

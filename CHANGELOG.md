@@ -2,6 +2,15 @@
 
 All notable changes to CredStore will be documented in this file.
 
+## [1.0.17] - 2026-07-14
+
+### Fixed
+
+- Require real enrolled biometrics for native biometric registration instead of treating PIN/password fallback as biometric
+  availability.
+- Add an in-app biometric scanning and success screen around the OS fingerprint/face prompt.
+- Stop advertising Windows/Linux biometric unlock until a tested native key-release bridge exists for those platforms.
+
 ## [1.0.16] - 2026-07-13
 
 ### Bug Fix

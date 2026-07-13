@@ -4,7 +4,7 @@
   <img src="./.res/text.svg" alt="CredStore">
 </div>
 
-<p align="center"><b>1.0.16</b></p>
+<p align="center"><b>1.0.17</b></p>
 
 CredStore is a strictly offline personal credential manager for desktop, web, and Android.
 
@@ -43,10 +43,11 @@ npm install -g github.com:LocaMartin/credstore
 ### Windows
 
 ```powershell
-winget install credstore
+# Not available from the official winget community source until a winget-pkgs manifest is accepted.
+# Use the GitHub Releases installer for now.
 ```
 
-If the winget manifest is not available yet, download the Windows installer from GitHub Releases.
+`winget install credstore` will not work until CredStore is accepted into the official winget package index.
 
 ### Android
 
@@ -62,7 +63,7 @@ https://credstore.en.uptodown.com/android
 - AES-256-GCM encrypted vault data.
 - PBKDF2-SHA-256 key derivation with 600,000 iterations and 24-byte salts.
 - Encrypted vault keys wrapped by one or more password master keys.
-- Native Android biometric keychain support for fingerprint and strong face unlock.
+- Native Android/iOS biometric keychain support for OS-reported fingerprint, Touch ID, Face ID, or Android face unlock.
 - Flexible credential fields: store usernames, passwords, API secrets, URLs, tokens, notes, or any custom key/value.
 - Per-field secret masking and copy controls.
 - Credential notes are shown on saved credential cards.
@@ -85,15 +86,14 @@ password key can unlock the vault without storing plaintext credentials or a reu
 Password master keys must be at least 8 characters and include lowercase, uppercase, number, and symbol characters.
 After 10 failed unlock attempts, CredStore applies a local lockout delay.
 
-Fingerprint and face recognition keys are available through platform-specific native bridges:
+Fingerprint and face recognition keys are available only through tested platform-native bridges:
 
 - Android and iOS use native biometric/keychain support through Capacitor plugins.
 - macOS uses Touch ID when Electron can call the local system biometric prompt.
-- Windows uses Windows Hello through the Electron main process.
-- Linux uses `fprintd` when installed and enrolled, then stores the wrapped vault key through Electron safeStorage.
+- Windows Hello and Linux fingerprint unlock are disabled until CredStore has tested native key-release bridges for those
+  platforms.
 
-Linux biometric support depends on the user's distribution, desktop keyring, PAM/fprintd setup, and fingerprint reader
-driver. If those system services are unavailable, CredStore falls back to password master keys.
+When native biometric support is unavailable, CredStore falls back to password master keys.
 
 ## Security Architecture
 

@@ -249,22 +249,18 @@ async function getDesktopBiometricAvailability() {
   }
 
   if (process.platform === "win32") {
-    const result = await runWindowsHelloCheck()
     return {
-      available: result,
-      code: result ? "AVAILABLE" : "UNAVAILABLE",
-      message: result ? "Windows Hello is available." : "Windows Hello is unavailable or not configured.",
+      available: false,
+      code: "NATIVE_PLUGIN_REQUIRED",
+      message: "Windows Hello unlock needs a tested native key-release bridge. It is disabled in this build.",
     }
   }
 
   if (process.platform === "linux") {
-    const result = await commandExists("fprintd-verify")
     return {
-      available: result,
-      code: result ? "AVAILABLE" : "UNAVAILABLE",
-      message: result
-        ? "Linux fingerprint verification is available through fprintd."
-        : "Install and enroll fprintd fingerprints to use biometric unlock on Linux.",
+      available: false,
+      code: "NATIVE_PLUGIN_REQUIRED",
+      message: "Linux fingerprint unlock needs a tested native key-release bridge. It is disabled in this build.",
     }
   }
 
@@ -279,70 +275,19 @@ async function verifyDesktopBiometric(reason) {
   }
 
   if (process.platform === "win32") {
-    const verified = await runWindowsHelloPrompt(reason)
-    if (!verified) throw new Error("Windows Hello verification failed")
-    return
+    throw new Error("Windows Hello unlock is disabled until the native bridge is implemented")
   }
 
   if (process.platform === "linux") {
-    const verified = await runLinuxFingerprintPrompt()
-    if (!verified) throw new Error("Linux fingerprint verification failed")
-    return
+    throw new Error("Linux fingerprint unlock is disabled until the native bridge is implemented")
   }
 
   throw new Error("Desktop biometric unlock is unsupported here")
 }
 
-function runPowerShell(script) {
-  return new Promise((resolve) => {
-    const child = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script], {
-      windowsHide: true,
-    })
-    let output = ""
-    child.stdout.on("data", (chunk) => {
-      output += chunk.toString()
-    })
-    child.on("error", () => resolve(""))
-    child.on("close", () => resolve(output.trim()))
-  })
-}
-
-async function runWindowsHelloCheck() {
-  const script = `
-    Add-Type -AssemblyName System.Runtime.WindowsRuntime
-    [Windows.Security.Credentials.UI.UserConsentVerifier,Windows.Security.Credentials.UI,ContentType=WindowsRuntime] | Out-Null
-    $op = [Windows.Security.Credentials.UI.UserConsentVerifier]::CheckAvailabilityAsync()
-    $result = [System.WindowsRuntimeSystemExtensions]::AsTask($op).GetAwaiter().GetResult()
-    [Console]::Write($result.ToString())
-  `
-  const output = await runPowerShell(script)
-  return output === "Available"
-}
-
-async function runWindowsHelloPrompt(reason) {
-  const escapedReason = String(reason).replace(/'/g, "''")
-  const script = `
-    Add-Type -AssemblyName System.Runtime.WindowsRuntime
-    [Windows.Security.Credentials.UI.UserConsentVerifier,Windows.Security.Credentials.UI,ContentType=WindowsRuntime] | Out-Null
-    $op = [Windows.Security.Credentials.UI.UserConsentVerifier]::RequestVerificationAsync('${escapedReason}')
-    $result = [System.WindowsRuntimeSystemExtensions]::AsTask($op).GetAwaiter().GetResult()
-    [Console]::Write($result.ToString())
-  `
-  const output = await runPowerShell(script)
-  return output === "Verified"
-}
-
 function commandExists(command) {
   return new Promise((resolve) => {
     const child = spawn("sh", ["-lc", `command -v ${command}`])
-    child.on("error", () => resolve(false))
-    child.on("close", (code) => resolve(code === 0))
-  })
-}
-
-function runLinuxFingerprintPrompt() {
-  return new Promise((resolve) => {
-    const child = spawn("fprintd-verify", [], { stdio: "ignore" })
     child.on("error", () => resolve(false))
     child.on("close", (code) => resolve(code === 0))
   })

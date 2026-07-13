@@ -3,7 +3,7 @@
 import { Component, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { QRCodeCanvas } from "qrcode.react"
 import { Capacitor, registerPlugin } from "@capacitor/core"
-import { AccessControl, NativeBiometric } from "@capgo/capacitor-native-biometric"
+import { AccessControl, BiometryType, NativeBiometric } from "@capgo/capacitor-native-biometric"
 import { hashes as ed25519Hashes, verifyAsync as verifyEd25519 } from "@noble/ed25519"
 import { gzipSync, gunzipSync, strFromU8, strToU8 } from "fflate"
 import { Badge } from "@/components/ui/badge"
@@ -83,7 +83,7 @@ import {
 } from "lucide-react"
 import { ResetCredStore } from "@/components/reset-button"
 
-const APP_VERSION = "1.0.16"
+const APP_VERSION = "1.0.17"
 const MAX_UNLOCK_DELAY_MS = 30000
 const MAX_FAILED_UNLOCKS = 10
 const FREE_SYNC_DEVICE_LIMIT = 5
@@ -140,6 +140,8 @@ type BiometricAvailability = {
   available: boolean
   code?: string
   message?: string
+  biometryType?: BiometryType
+  strongBiometryIsAvailable?: boolean
 }
 
 type CredStoreSyncFrame = {
@@ -179,6 +181,8 @@ type CompactVaultRecord = {
 type BiometricUiState = {
   target: "login-fingerprint" | "login-face" | "register-fingerprint" | "register-face" | null
   phase: "idle" | "running" | "success"
+  mode?: "login" | "register"
+  label?: string
 }
 
 type SyncDoneState = {
@@ -399,19 +403,28 @@ async function assertMonotonicLicenseClock() {
 }
 
 function describeBiometricAvailability(result: BiometricAvailability) {
-  if (result.available) return "Strong biometric unlock is available."
+  if (result.available) {
+    if (result.biometryType === BiometryType.FACE_ID || result.biometryType === BiometryType.FACE_AUTHENTICATION) {
+      return "Face biometric unlock is available through the operating system."
+    }
+    if (result.biometryType === BiometryType.FINGERPRINT || result.biometryType === BiometryType.TOUCH_ID) {
+      return "Fingerprint or Touch ID unlock is available through the operating system."
+    }
+    if (result.biometryType === BiometryType.MULTIPLE) return "Multiple biometric unlock methods are available."
+    return "Biometric unlock is available through the operating system."
+  }
 
   switch (result.code) {
     case "NO_HARDWARE":
       return "This device does not report biometric hardware."
     case "NONE_ENROLLED":
-      return "No strong fingerprint or face biometric is enrolled on this device."
+      return "No fingerprint or face biometric is enrolled on this device."
     case "UNAVAILABLE":
       return "Biometric hardware is currently unavailable."
     case "SECURITY_UPDATE_REQUIRED":
       return "Android requires a security update before biometric unlock can be used."
     case "UNSUPPORTED":
-      return "This Android version does not support the required strong biometric prompt."
+      return "This OS version does not support the required biometric prompt."
     case "PLUGIN_UNAVAILABLE":
       return "Native biometric plugin is unavailable in this build."
     default:
@@ -419,28 +432,32 @@ function describeBiometricAvailability(result: BiometricAvailability) {
   }
 }
 
-async function getBiometricAvailability(): Promise<BiometricAvailability> {
-  if (typeof window !== "undefined" && window.credstoreNative?.biometric) {
-    return window.credstoreNative.biometric.isAvailable()
-  }
+function biometricLabelForResult(result: BiometricAvailability) {
+  if (result.biometryType === BiometryType.FACE_ID || result.biometryType === BiometryType.FACE_AUTHENTICATION) return "Face"
+  if (result.biometryType === BiometryType.TOUCH_ID) return "Touch ID"
+  if (result.biometryType === BiometryType.FINGERPRINT) return "Fingerprint"
+  return "Biometric"
+}
 
+function biometricTypeAllowed(type: "fingerprint" | "face", result: BiometricAvailability) {
+  if (!result.available) return false
+  if (result.biometryType === BiometryType.MULTIPLE || result.biometryType === undefined) return true
+  if (type === "face") return result.biometryType === BiometryType.FACE_ID || result.biometryType === BiometryType.FACE_AUTHENTICATION
+  return result.biometryType === BiometryType.FINGERPRINT || result.biometryType === BiometryType.TOUCH_ID
+}
+
+async function getBiometricAvailability(): Promise<BiometricAvailability> {
   if (Capacitor.isNativePlatform()) {
     const platform = Capacitor.getPlatform()
-    if (platform === "android") {
-      try {
-        const nativeResult = await CredStoreBiometric.isAvailable()
-        if (nativeResult.available) return nativeResult
-      } catch {
-        // Try the package plugin below; some builds only expose one biometric bridge.
-      }
-    }
 
     try {
-      const result = await NativeBiometric.isAvailable({ useFallback: true })
+      const result = await NativeBiometric.isAvailable({ useFallback: false })
       const packageResult = {
         available: result.isAvailable,
         code: result.errorCode ? String(result.errorCode) : result.isAvailable ? "AVAILABLE" : "UNAVAILABLE",
         message: result.isAvailable ? "Native biometric unlock is available." : "Native biometric unlock is unavailable.",
+        biometryType: result.biometryType,
+        strongBiometryIsAvailable: result.strongBiometryIsAvailable,
       }
       if (packageResult.available || platform !== "android") return packageResult
     } catch {
@@ -454,15 +471,14 @@ async function getBiometricAvailability(): Promise<BiometricAvailability> {
     }
   }
 
+  if (typeof window !== "undefined" && window.credstoreNative?.biometric) {
+    return window.credstoreNative.biometric.isAvailable()
+  }
+
   return { available: false, code: "PLUGIN_UNAVAILABLE", message: "Native biometric support is unavailable in this build." }
 }
 
 async function createBiometricSecret(slotId: string, secret: string): Promise<BiometricKey> {
-  if (typeof window !== "undefined" && window.credstoreNative?.biometric) {
-    const protectedSecret = await window.credstoreNative.biometric.createSecret({ slotId, secret })
-    return { platform: "electron-safe-storage", encrypted: protectedSecret.encrypted, iv: protectedSecret.iv }
-  }
-
   if (Capacitor.isNativePlatform()) {
     try {
       await NativeBiometric.setData({
@@ -478,6 +494,11 @@ async function createBiometricSecret(slotId: string, secret: string): Promise<Bi
       const protectedSecret = await CredStoreBiometric.createSecret({ slotId, secret })
       return { platform: "android-keystore", encrypted: protectedSecret.encrypted, iv: protectedSecret.iv }
     }
+  }
+
+  if (typeof window !== "undefined" && window.credstoreNative?.biometric) {
+    const protectedSecret = await window.credstoreNative.biometric.createSecret({ slotId, secret })
+    return { platform: "electron-safe-storage", encrypted: protectedSecret.encrypted, iv: protectedSecret.iv }
   }
 
   throw new Error("Biometric storage is not available")
@@ -665,6 +686,52 @@ function DesktopWindowChrome() {
   )
 }
 
+function BiometricCeremony({ state }: { state: BiometricUiState }) {
+  if (!state.target || state.phase === "idle") return null
+
+  const isFace = state.target.includes("face")
+  const title =
+    state.phase === "success"
+      ? `${state.label || (isFace ? "Face" : "Fingerprint")} ${state.mode === "register" ? "registered" : "accepted"}`
+      : `${state.mode === "register" ? "Register" : "Scan"} ${state.label || (isFace ? "face" : "fingerprint")}`
+  const detail =
+    state.phase === "success"
+      ? "CredStore received a verified result from the operating system."
+      : "Use the secure biometric prompt shown by your operating system."
+
+  return (
+    <div className="fixed inset-0 z-[70] grid place-items-center bg-black/70 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-sm rounded-lg border border-white/15 bg-slate-950/95 p-6 text-center text-white shadow-2xl">
+        <div className="mx-auto mb-5 grid h-44 w-44 place-items-center rounded-full border border-blue-300/30 bg-blue-950/30">
+          {state.phase === "success" ? (
+            <div className="grid h-28 w-28 place-items-center rounded-full border-2 border-emerald-300 bg-emerald-400/10">
+              <CheckCircle2 className="h-16 w-16 animate-pulse text-emerald-300" />
+            </div>
+          ) : isFace ? (
+            <div className="relative h-32 w-32">
+              <div className="absolute inset-3 rounded-[42%] border border-blue-300/70" />
+              <div className="absolute left-8 right-8 top-12 h-2 rounded-full bg-blue-300/80" />
+              <div className="absolute bottom-10 left-12 right-12 h-1 rounded-full bg-blue-300/70" />
+              <div className="absolute left-3 top-3 h-9 w-9 rounded-tl-lg border-l-4 border-t-4 border-white" />
+              <div className="absolute right-3 top-3 h-9 w-9 rounded-tr-lg border-r-4 border-t-4 border-white" />
+              <div className="absolute bottom-3 left-3 h-9 w-9 rounded-bl-lg border-b-4 border-l-4 border-white" />
+              <div className="absolute bottom-3 right-3 h-9 w-9 rounded-br-lg border-b-4 border-r-4 border-white" />
+              <div className="absolute left-5 right-5 top-1/2 h-1 animate-pulse rounded-full bg-cyan-300 shadow-[0_0_24px_rgba(103,232,249,0.9)]" />
+            </div>
+          ) : (
+            <div className="relative h-32 w-24">
+              <Fingerprint className="absolute inset-0 h-32 w-24 text-white/90" />
+              <div className="absolute bottom-3 left-1/2 h-24 w-1 -translate-x-1/2 animate-pulse rounded-full bg-blue-400 shadow-[0_0_24px_rgba(96,165,250,0.9)]" />
+            </div>
+          )}
+        </div>
+        <h2 className="text-2xl font-bold">{title}</h2>
+        <p className="mt-2 text-sm text-gray-300">{detail}</p>
+      </div>
+    </div>
+  )
+}
+
 function CredentialCard({
   credential,
   visibleFields,
@@ -821,6 +888,9 @@ export default function CredStore() {
   const unlockDelayRemaining = Math.max(0, unlockDelayUntil - Date.now())
   const isUnlockDelayed = unlockDelayRemaining > 0
   const biometricAvailable = biometricAvailability.available
+  const nativeBiometricLabel = biometricLabelForResult(biometricAvailability)
+  const canUseFingerprint = biometricTypeAllowed("fingerprint", biometricAvailability)
+  const canUseFace = biometricTypeAllowed("face", biometricAvailability)
   const maxSyncDevices = activeLicense?.maxDevices || FREE_SYNC_DEVICE_LIMIT
   const syncDeviceCount = vaultData.metadata?.syncedDevices.length || 1
   const syncLimitLabel = activeLicense
@@ -1103,9 +1173,15 @@ export default function CredStore() {
   const handleBiometricUnlock = useCallback(
     async (type: "fingerprint" | "face") => {
       const target = type === "fingerprint" ? "login-fingerprint" : "login-face"
-      setBiometricUi({ target, phase: "running" })
+      const label = type === "face" ? "Face" : nativeBiometricLabel
+      setBiometricUi({ target, phase: "running", mode: "login", label })
       if (!biometricAvailable) {
         setBiometricMessage(describeBiometricAvailability(biometricAvailability))
+        setBiometricUi({ target: null, phase: "idle" })
+        return
+      }
+      if (!biometricTypeAllowed(type, biometricAvailability)) {
+        setBiometricMessage(`${type === "face" ? "Face unlock" : "Fingerprint unlock"} is not reported by this device.`)
         setBiometricUi({ target: null, phase: "idle" })
         return
       }
@@ -1125,14 +1201,14 @@ export default function CredStore() {
         const secret = await getBiometricSecret(slot.id, slot.biometricKey)
 
         await unlockWithVaultKey(storedVault, base64ToBytes(secret))
-        setBiometricUi({ target, phase: "success" })
+        setBiometricUi({ target, phase: "success", mode: "login", label })
         window.setTimeout(() => setBiometricUi({ target: null, phase: "idle" }), 900)
       } catch (error) {
         setBiometricMessage(error instanceof Error ? error.message : "Biometric unlock failed.")
         setBiometricUi({ target: null, phase: "idle" })
       }
     },
-    [biometricAvailability, biometricAvailable, unlockWithVaultKey],
+    [biometricAvailability, biometricAvailable, nativeBiometricLabel, unlockWithVaultKey],
   )
 
   const addField = useCallback(() => {
@@ -1260,13 +1336,19 @@ export default function CredStore() {
     async (type: "fingerprint" | "face") => {
       if (!vaultRecord || !vaultKey) return
 
-      const label = type === "fingerprint" ? "Fingerprint master key" : "Face master key"
       const slotId = createId()
       const target = type === "fingerprint" ? "register-fingerprint" : "register-face"
-      setBiometricUi({ target, phase: "running" })
+      const displayLabel = type === "face" ? "Face" : nativeBiometricLabel
+      const label = `${displayLabel} master key`
+      setBiometricUi({ target, phase: "running", mode: "register", label: displayLabel })
 
       if (!biometricAvailable) {
         setBiometricMessage(describeBiometricAvailability(biometricAvailability))
+        setBiometricUi({ target: null, phase: "idle" })
+        return
+      }
+      if (!biometricTypeAllowed(type, biometricAvailability)) {
+        setBiometricMessage(`${type === "face" ? "Face unlock" : "Fingerprint unlock"} is not reported by this device.`)
         setBiometricUi({ target: null, phase: "idle" })
         return
       }
@@ -1289,14 +1371,14 @@ export default function CredStore() {
         setVaultRecord(nextRecord)
         await persistVault(credentials, nextRecord, vaultKey)
         setBiometricMessage(`${label} saved.`)
-        setBiometricUi({ target, phase: "success" })
+        setBiometricUi({ target, phase: "success", mode: "register", label: displayLabel })
         window.setTimeout(() => setBiometricUi({ target: null, phase: "idle" }), 900)
       } catch (error) {
         setBiometricMessage(error instanceof Error ? error.message : "Biometric registration failed.")
         setBiometricUi({ target: null, phase: "idle" })
       }
     },
-    [biometricAvailability, biometricAvailable, credentials, persistVault, vaultKey, vaultRecord],
+    [biometricAvailability, biometricAvailable, credentials, nativeBiometricLabel, persistVault, vaultKey, vaultRecord],
   )
 
   const removeMasterKey = useCallback(
@@ -1587,6 +1669,7 @@ export default function CredStore() {
         style={{ paddingTop: "max(2.75rem, env(safe-area-inset-top))", paddingBottom: "max(1rem, env(safe-area-inset-bottom))" }}
       >
         <DesktopWindowChrome />
+        <BiometricCeremony state={biometricUi} />
         <Card className="w-full max-w-sm border-white/10 bg-white/5 shadow-lg">
           <CardHeader className="pb-4 text-center">
             <LogoMark className="mx-auto mb-3 h-12 w-12" />
@@ -1633,17 +1716,17 @@ export default function CredStore() {
                 variant="outline"
                 className="border-white/20 bg-white/5 text-xs text-white hover:bg-white/10"
                 onClick={() => handleBiometricUnlock("fingerprint")}
-                disabled={biometricUi.phase === "running"}
+                disabled={biometricUi.phase === "running" || !canUseFingerprint}
               >
                 {biometricButtonIcon("login-fingerprint", <Fingerprint className="mr-2 h-4 w-4" />)}
-                Fingerprint
+                {nativeBiometricLabel === "Touch ID" ? "Touch ID" : "Fingerprint"}
               </Button>
               <Button
                 type="button"
                 variant="outline"
                 className="border-white/20 bg-white/5 text-xs text-white hover:bg-white/10"
                 onClick={() => handleBiometricUnlock("face")}
-                disabled={biometricUi.phase === "running"}
+                disabled={biometricUi.phase === "running" || !canUseFace}
               >
                 {biometricButtonIcon("login-face", <ScanFace className="mr-2 h-4 w-4" />)}
                 Face
@@ -1662,6 +1745,7 @@ export default function CredStore() {
       style={{ paddingTop: "max(2.5rem, env(safe-area-inset-top))", paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
     >
       <DesktopWindowChrome />
+      <BiometricCeremony state={biometricUi} />
       <div className="mx-auto max-w-4xl space-y-4 px-3 pb-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0 flex items-center gap-2">
@@ -1887,16 +1971,16 @@ export default function CredStore() {
                         onClick={() => addNativePlaceholder("fingerprint")}
                         variant="outline"
                         className="border-white/20 bg-white/5 text-xs text-white hover:bg-white/10"
-                        disabled={biometricUi.phase === "running"}
+                        disabled={biometricUi.phase === "running" || !canUseFingerprint}
                       >
                         {biometricButtonIcon("register-fingerprint", <Fingerprint className="mr-1 h-3 w-3" />)}
-                        Fingerprint
+                        {nativeBiometricLabel === "Touch ID" ? "Touch ID" : "Fingerprint"}
                       </Button>
                       <Button
                         onClick={() => addNativePlaceholder("face")}
                         variant="outline"
                         className="border-white/20 bg-white/5 text-xs text-white hover:bg-white/10"
-                        disabled={biometricUi.phase === "running"}
+                        disabled={biometricUi.phase === "running" || !canUseFace}
                       >
                         {biometricButtonIcon("register-face", <ScanFace className="mr-1 h-3 w-3" />)}
                         Face
