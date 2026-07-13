@@ -5,6 +5,7 @@ import { QRCodeCanvas } from "qrcode.react"
 import { Capacitor, registerPlugin } from "@capacitor/core"
 import { AccessControl, NativeBiometric } from "@capgo/capacitor-native-biometric"
 import { hashes as ed25519Hashes, verifyAsync as verifyEd25519 } from "@noble/ed25519"
+import { gzipSync, gunzipSync, strFromU8, strToU8 } from "fflate"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -46,6 +47,8 @@ import {
   type CredentialCategory,
   type CredentialDraft,
   type CredentialField,
+  type EncryptedPayload,
+  type KeySlot,
   type LegacyCredential,
   type ThemeName,
   type VaultData,
@@ -76,16 +79,16 @@ import {
 } from "lucide-react"
 import { ResetCredStore } from "@/components/reset-button"
 
-const APP_VERSION = "1.0.14"
+const APP_VERSION = "1.0.15"
 const MAX_UNLOCK_DELAY_MS = 30000
 const MAX_FAILED_UNLOCKS = 10
 const FREE_SYNC_DEVICE_LIMIT = 5
-const SYNC_FRAME_CHUNK_SIZE = 240
 const LOCKOUT_STORAGE_KEY = "credstore_lockout_until"
 const INSTALLATION_ID_STORAGE_KEY = "credstore_installation_id"
 const CREDSTORE_DEEPLINK_SCHEME = "credstore"
 const RUNTIME_LOGO_PATH = "./logo.svg"
 const LICENSE_CLOCK_STORAGE_KEY = "credstore_license_last_seen_at"
+const SYNC_QR_PREFIX = "cs1."
 
 ed25519Hashes.sha512Async = async (message) =>
   new Uint8Array(await crypto.subtle.digest("SHA-512", new Uint8Array(message).buffer))
@@ -146,6 +149,29 @@ type CredStoreSyncFrame = {
   chunk: string
 }
 
+type CompactEncryptedPayload = {
+  e: string
+  i: string
+  s?: string
+}
+
+type CompactKeySlot = {
+  id: string
+  t: KeySlot["type"]
+  l: string
+  n: boolean
+  w?: CompactEncryptedPayload
+  b?: BiometricKey
+}
+
+type CompactVaultRecord = {
+  v: 2
+  p: CompactEncryptedPayload
+  k: CompactKeySlot[]
+  c: string
+  u: string
+}
+
 declare global {
   interface Window {
     credstoreWindow?: {
@@ -203,6 +229,56 @@ function base64UrlToBytes(value: string) {
   return Uint8Array.from(atob(padded), (char) => char.charCodeAt(0))
 }
 
+function compactEncryptedPayload(payload: EncryptedPayload): CompactEncryptedPayload {
+  return {
+    e: bytesToBase64Url(Uint8Array.from(payload.encrypted)),
+    i: bytesToBase64Url(Uint8Array.from(payload.iv)),
+    ...(payload.salt ? { s: payload.salt } : {}),
+  }
+}
+
+function expandEncryptedPayload(payload: CompactEncryptedPayload): EncryptedPayload {
+  return {
+    encrypted: Array.from(base64UrlToBytes(payload.e)),
+    iv: Array.from(base64UrlToBytes(payload.i)),
+    ...(payload.s ? { salt: payload.s } : {}),
+  }
+}
+
+function compactVaultRecord(vault: VaultRecord): CompactVaultRecord {
+  return {
+    v: 2,
+    p: compactEncryptedPayload(vault.payload),
+    k: vault.keySlots.map((slot) => ({
+      id: slot.id,
+      t: slot.type,
+      l: slot.label,
+      n: slot.enabled,
+      ...(slot.wrappedKey ? { w: compactEncryptedPayload(slot.wrappedKey) } : {}),
+      ...(slot.biometricKey ? { b: slot.biometricKey } : {}),
+    })),
+    c: vault.createdAt,
+    u: vault.updatedAt,
+  }
+}
+
+function expandVaultRecord(vault: CompactVaultRecord): VaultRecord {
+  return {
+    version: 2,
+    payload: expandEncryptedPayload(vault.p),
+    keySlots: vault.k.map((slot) => ({
+      id: slot.id,
+      type: slot.t,
+      label: slot.l,
+      enabled: slot.n,
+      ...(slot.w ? { wrappedKey: expandEncryptedPayload(slot.w) } : {}),
+      ...(slot.b ? { biometricKey: slot.b } : {}),
+    })),
+    createdAt: vault.c,
+    updatedAt: vault.u,
+  }
+}
+
 function checksumText(value: string) {
   let hash = 2166136261
   for (let index = 0; index < value.length; index += 1) {
@@ -214,35 +290,54 @@ function checksumText(value: string) {
 }
 
 function createSyncPayload(vault: VaultRecord) {
-  return encodePayload({
+  const compactPayload = {
     scheme: CREDSTORE_DEEPLINK_SCHEME,
-    type: "credstore-offline-sync",
-    version: 2,
+    type: "credstore-sync",
+    v: 3,
     createdAt: new Date().toISOString(),
-    vault,
-  })
+    vault: compactVaultRecord(vault),
+  }
+
+  return `${SYNC_QR_PREFIX}${bytesToBase64Url(gzipSync(strToU8(JSON.stringify(compactPayload))))}`
 }
 
-function createSyncFrames(vault: VaultRecord) {
-  const sessionId = createId()
-  const payload = createSyncPayload(vault)
-  const checksum = checksumText(payload)
-  const chunks = Array.from({ length: Math.ceil(payload.length / SYNC_FRAME_CHUNK_SIZE) }, (_, index) =>
-    payload.slice(index * SYNC_FRAME_CHUNK_SIZE, (index + 1) * SYNC_FRAME_CHUNK_SIZE),
-  )
+function decodeSyncPayload(value: string) {
+  if (value.startsWith(SYNC_QR_PREFIX)) {
+    const raw = strFromU8(gunzipSync(base64UrlToBytes(value.slice(SYNC_QR_PREFIX.length))))
+    const parsed = JSON.parse(raw) as {
+      scheme?: string
+      type?: string
+      v?: number
+      vault?: CompactVaultRecord
+    }
 
-  return chunks.map((chunk, index) =>
-    encodePayload({
-      scheme: CREDSTORE_DEEPLINK_SCHEME,
-      type: "credstore-sync-frame",
-      version: 2,
-      sessionId,
-      index,
-      total: chunks.length,
-      checksum,
-      chunk,
-    } satisfies CredStoreSyncFrame),
-  )
+    if (
+      parsed.scheme !== CREDSTORE_DEEPLINK_SCHEME ||
+      parsed.type !== "credstore-sync" ||
+      parsed.v !== 3 ||
+      !parsed.vault
+    ) {
+      throw new Error("Invalid sync payload")
+    }
+
+    return expandVaultRecord(parsed.vault)
+  }
+
+  const parsed = decodePayload<{
+    scheme?: string
+    type?: string
+    vault?: VaultRecord
+  }>(value)
+
+  if (
+    parsed.scheme !== CREDSTORE_DEEPLINK_SCHEME ||
+    parsed.type !== "credstore-offline-sync" ||
+    !parseVault(JSON.stringify(parsed.vault))
+  ) {
+    throw new Error("Invalid sync payload")
+  }
+
+  return parsed.vault
 }
 
 async function assertMonotonicLicenseClock() {
@@ -619,8 +714,6 @@ export default function CredStore() {
   const [syncCode, setSyncCode] = useState("")
   const [syncMode, setSyncMode] = useState<"client" | "receiver">("client")
   const [syncPayload, setSyncPayload] = useState("")
-  const [syncFrames, setSyncFrames] = useState<string[]>([])
-  const [syncFrameIndex, setSyncFrameIndex] = useState(0)
   const [syncMessage, setSyncMessage] = useState("")
   const [vaultData, setVaultData] = useState<VaultData>(normalizeVaultData(null))
   const [licenseToken, setLicenseToken] = useState("")
@@ -689,9 +782,7 @@ export default function CredStore() {
     setUnlockDelayUntil(0)
     setFailedUnlocks(0)
     setDraft(createDraft())
-    setSyncFrames([])
     setSyncPayload("")
-    setSyncFrameIndex(0)
     receivedSyncFramesRef.current = {}
   }, [])
 
@@ -1104,16 +1195,9 @@ export default function CredStore() {
       return
     }
 
-    const frames = createSyncFrames(vaultRecord)
-    setSyncFrames(frames)
-    setSyncFrameIndex(0)
-    setSyncPayload(frames[0] || "")
-    setSyncCode(frames.length > 1 ? `1/${frames.length}` : "1/1")
-    setSyncMessage(
-      frames.length > 1
-        ? `Generated ${frames.length} QR frames. Scan every frame on the receiver.`
-      : "One QR frame generated. Scan it on the receiver.",
-    )
+    setSyncPayload(createSyncPayload(vaultRecord))
+    setSyncCode("ONE-TIME")
+    setSyncMessage("One-time QR generated. Scan it on the receiver.")
   }, [maxSyncDevices, vaultData.metadata?.syncedDevices.length, vaultRecord])
 
   useEffect(() => {
@@ -1125,13 +1209,21 @@ export default function CredStore() {
     async (payload: string) => {
       try {
         const trimmed = payload.trim()
+        if (trimmed.startsWith(SYNC_QR_PREFIX)) {
+          const vault = decodeSyncPayload(trimmed)
+          await writeStoredValue(VAULT_STORAGE_KEY, JSON.stringify(vault))
+          setSyncMessage("Vault imported. Locking now; unlock with one of the synced master keys.")
+          lockVault()
+          return
+        }
+
         const parsed = decodePayload<
           | CredStoreSyncFrame
           | {
-          scheme?: string
-          type?: string
-          vault?: VaultRecord
-        }
+              scheme?: string
+              type?: string
+              vault?: VaultRecord
+            }
         >(trimmed)
 
         if (parsed.scheme !== CREDSTORE_DEEPLINK_SCHEME) throw new Error("Invalid scheme")
@@ -1151,35 +1243,15 @@ export default function CredStore() {
           const assembled = ordered.map((frame) => frame?.chunk || "").join("")
           if (checksumText(assembled) !== parsed.checksum) throw new Error("Checksum mismatch")
 
-          const fullPayload = decodePayload<{
-            scheme?: string
-            type?: string
-            vault?: VaultRecord
-          }>(assembled)
-
-          if (
-            fullPayload.scheme !== CREDSTORE_DEEPLINK_SCHEME ||
-            fullPayload.type !== "credstore-offline-sync" ||
-            !parseVault(JSON.stringify(fullPayload.vault))
-          ) {
-            throw new Error("Invalid sync payload")
-          }
-
-          await writeStoredValue(VAULT_STORAGE_KEY, JSON.stringify(fullPayload.vault))
+          const vault = decodeSyncPayload(assembled)
+          await writeStoredValue(VAULT_STORAGE_KEY, JSON.stringify(vault))
           setSyncMessage("All QR frames imported. Locking now; unlock with one of the synced master keys.")
           lockVault()
           return
         }
 
-        if (
-          parsed.scheme !== CREDSTORE_DEEPLINK_SCHEME ||
-          parsed.type !== "credstore-offline-sync" ||
-          !parseVault(JSON.stringify(parsed.vault))
-        ) {
-          throw new Error("Invalid sync payload")
-        }
-
-        await writeStoredValue(VAULT_STORAGE_KEY, JSON.stringify(parsed.vault))
+        const vault = decodeSyncPayload(trimmed)
+        await writeStoredValue(VAULT_STORAGE_KEY, JSON.stringify(vault))
         setSyncMessage("Vault imported. Locking now; unlock with one of the synced master keys.")
         lockVault()
       } catch {
@@ -1202,17 +1274,6 @@ export default function CredStore() {
       setSyncMessage(error instanceof Error ? error.message : "Camera QR scanning failed.")
     }
   }, [importSyncPayload])
-
-  const showSyncFrame = useCallback(
-    (nextIndex: number) => {
-      if (!syncFrames.length) return
-      const boundedIndex = Math.min(Math.max(nextIndex, 0), syncFrames.length - 1)
-      setSyncFrameIndex(boundedIndex)
-      setSyncPayload(syncFrames[boundedIndex])
-      setSyncCode(`${boundedIndex + 1}/${syncFrames.length}`)
-    },
-    [syncFrames],
-  )
 
   const verifyLicenseToken = useCallback(async (token: string): Promise<LicenseRecord> => {
     await assertMonotonicLicenseClock()
@@ -1471,41 +1532,38 @@ export default function CredStore() {
                   </div>
                   {syncMode === "client" ? (
                     <div className="space-y-3">
-                      <div className="rounded-md border border-white/10 bg-white p-4 text-center text-black">
+                      <div className="rounded-lg border border-white/15 bg-gradient-to-br from-white to-slate-100 p-3 text-center text-slate-950 shadow-xl shadow-black/30">
+                        <div className="mb-2 flex items-center justify-center gap-2 text-xs font-semibold text-slate-700">
+                          <LogoMark className="h-5 w-5" />
+                          CredStore One-Time Sync
+                        </div>
                         {syncPayload ? (
                           <QrRenderBoundary
                             key={syncPayload}
                             onError={() => setSyncMessage("QR generation failed. Generate a new one-time QR.")}
                           >
-                            <QRCodeCanvas value={syncPayload} size={220} level="L" includeMargin />
+                            <div className="inline-grid rounded-lg border border-slate-200 bg-white p-3 shadow-inner">
+                              <QRCodeCanvas
+                                value={syncPayload}
+                                size={248}
+                                level="M"
+                                includeMargin={false}
+                                imageSettings={{
+                                  src: RUNTIME_LOGO_PATH,
+                                  height: 42,
+                                  width: 42,
+                                  excavate: true,
+                                }}
+                              />
+                            </div>
                           </QrRenderBoundary>
                         ) : (
                           <QrCode className="mx-auto h-24 w-24 text-gray-500" />
                         )}
-                        <p className="mt-2 font-mono text-xs tracking-[0.25em]">{syncCode || "--------"}</p>
+                        <p className="mt-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                          {syncCode || "One-time"}
+                        </p>
                       </div>
-                      {syncFrames.length > 1 && (
-                        <div className="grid grid-cols-2 gap-2">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() => showSyncFrame(syncFrameIndex - 1)}
-                            disabled={syncFrameIndex === 0}
-                            className="border-white/20 bg-white/5 text-xs text-white hover:bg-white/10"
-                          >
-                            Previous
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() => showSyncFrame(syncFrameIndex + 1)}
-                            disabled={syncFrameIndex >= syncFrames.length - 1}
-                            className="border-white/20 bg-white/5 text-xs text-white hover:bg-white/10"
-                          >
-                            Next
-                          </Button>
-                        </div>
-                      )}
                       <Button
                         onClick={createSyncCode}
                         className="w-full bg-gradient-to-r from-purple-500 to-blue-500 text-sm"
@@ -1515,7 +1573,7 @@ export default function CredStore() {
                       <div className="rounded-md border border-white/10 bg-white/5 p-3">
                         <p className="text-xs text-gray-300">
                           Open receiver mode on the other device and scan this QR. CredStore imports the encrypted vault
-                          automatically after every required frame is scanned.
+                          automatically after the QR is read.
                         </p>
                       </div>
                       <p className="text-xs text-gray-300">

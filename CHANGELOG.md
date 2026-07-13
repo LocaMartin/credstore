@@ -2,6 +2,14 @@
 
 All notable changes to CredStore will be documented in this file.
 
+## [1.0.15] - 2026-07-13
+
+### Changed
+
+- Replaced multi-frame sync QR transport with one compact QR using a compressed vault transfer payload.
+- Reworked the sync QR card UI with a cleaner framed layout and embedded CredStore logo.
+- Kept backward compatibility for importing older multi-frame sync QR payloads.
+
 ## [1.0.14] - 2026-07-13
 
 ### Fixed
