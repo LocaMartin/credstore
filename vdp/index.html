@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CredStore Vulnerability Disclosure Program</title>
+    <meta name="description" content="Report CredStore vulnerabilities and view the public hall of fame." />
+    <link rel="icon" href="../web/res/img/logo.svg" />
+    <link rel="stylesheet" href="../web/res/css/index.css" />
+    <script src="../web/res/js/site.js" defer></script>
+  </head>
+  <body>
+    <main>
+      <header class="hero compact-hero">
+        <nav class="topbar">
+          <a class="brand" href="/credstore/">
+            <img src="../web/res/img/logo.svg" alt="CredStore" />
+            <strong>CredStore VDP</strong>
+          </a>
+          <div class="top-actions">
+            <a href="/credstore/">Home</a>
+            <a href="/credstore/key/">License Key</a>
+            <a href="/credstore/fnc/">Feedback</a>
+          </div>
+        </nav>
+        <div class="hero-copy">
+          <p class="eyebrow">Vulnerability Disclosure Program</p>
+          <h1>Report security bugs responsibly.</h1>
+          <p class="muted">
+            Submit reproducible security reports, receive an internal ticket ID, and qualify for CredStore certificate
+            recognition or hall-of-fame placement after validation.
+          </p>
+        </div>
+      </header>
+
+      <section class="section-grid">
+        <article class="panel stack">
+          <h2>Submit VDP Ticket</h2>
+          <form id="bug-form" class="stack">
+            <label>
+              Hunter name
+              <input name="hunterName" required maxlength="120" />
+            </label>
+            <label>
+              Email
+              <input name="email" type="email" required maxlength="160" />
+            </label>
+            <label>
+              Severity
+              <select name="severity">
+                <option>Critical</option>
+                <option>High</option>
+                <option>Medium</option>
+                <option>Low</option>
+                <option>Informational</option>
+              </select>
+            </label>
+            <label>
+              Bug title
+              <input name="title" required maxlength="180" />
+            </label>
+            <label>
+              Details
+              <textarea name="message" data-markdown-editor required maxlength="6000" placeholder="Scope, impact, reproduction steps, affected version, and proof of concept."></textarea>
+            </label>
+            <button type="submit">Create VDP Ticket</button>
+            <p id="bug-status" class="muted"></p>
+          </form>
+        </article>
+
+        <article class="panel stack">
+          <h2>Program Rules</h2>
+          <p class="muted">
+            Do not access third-party data, publish active exploit details before remediation, or attack infrastructure
+            outside CredStore-owned surfaces. Good-faith reports are reviewed through the internal ticketing system.
+          </p>
+          <h2>Hall of Fame</h2>
+          <div id="hall-public" class="list empty">No public entries yet.</div>
+        </article>
+      </section>
+
+      <section class="panel stack">
+        <h2>VDP Ticket Chat</h2>
+        <p class="muted">
+          Continue a vulnerability report conversation with your ticket ID. Markdown formatting is supported.
+        </p>
+        <form id="ticket-chat-form" class="stack">
+          <div class="actions">
+            <label>
+              Ticket ID
+              <input name="ticketId" required maxlength="120" />
+            </label>
+            <label>
+              Email
+              <input name="email" type="email" required maxlength="160" />
+            </label>
+          </div>
+          <label>
+            Message
+            <textarea name="message" data-markdown-editor required maxlength="6000" placeholder="Add reproduction details, patch status, or follow-up notes."></textarea>
+          </label>
+          <div class="actions">
+            <button type="submit">Send Message</button>
+            <button id="ticket-chat-load" class="secondary" type="button">Load Chat</button>
+          </div>
+          <p id="ticket-chat-status" class="muted"></p>
+        </form>
+        <div id="ticket-chat-thread" class="chat-thread empty">No chat loaded.</div>
+      </section>
+    </main>
+  </body>
+</html>

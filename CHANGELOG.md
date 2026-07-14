@@ -2,6 +2,15 @@
 
 All notable changes to CredStore will be documented in this file.
 
+## [1.0.19] - 2026-07-15
+
+### Fixed
+
+- Fixed GitHub Pages route publishing for `/credstore/key/`, `/credstore/vdp/`, `/credstore/fnc/`, and
+  `/credstore/admin/` when Pages serves from the repository root.
+- Added root-level `robots.txt`, `sitemap.xml`, and `.well-known/security.txt` mirrors so crawler and security metadata
+  resolve on the live site.
+
 ## [1.0.18] - 2026-07-14
 
 ### Added

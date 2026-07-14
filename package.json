@@ -1,6 +1,6 @@
 {
   "name": "credstore",
-  "version": "1.0.18",
+  "version": "1.0.19",
   "private": false,
   "description": "Secure Offline Credential Manager",
   "license": "AGPL-3.0-or-later",

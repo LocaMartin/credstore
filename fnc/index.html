@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CredStore Feedback & Complaints</title>
+    <meta name="description" content="Submit CredStore feedback, payment complaints, screenshots, and transaction IDs." />
+    <link rel="icon" href="../web/res/img/logo.svg" />
+    <link rel="stylesheet" href="../web/res/css/index.css" />
+    <script src="../web/res/js/site.js" defer></script>
+  </head>
+  <body>
+    <main>
+      <header class="hero compact-hero">
+        <nav class="topbar">
+          <a class="brand" href="/credstore/">
+            <img src="../web/res/img/logo.svg" alt="CredStore" />
+            <strong>CredStore FNC</strong>
+          </a>
+          <div class="top-actions">
+            <a href="/credstore/">Home</a>
+            <a href="/credstore/key/">License Key</a>
+            <a href="/credstore/vdp/">VDP</a>
+          </div>
+        </nav>
+        <div class="hero-copy">
+          <p class="eyebrow">Feedback & Complaints</p>
+          <h1>Support tickets for payment and product issues.</h1>
+          <p class="muted">
+            Submit general feedback or a payment complaint with screenshot and transaction ID. The admin panel can search
+            transaction IDs and respond internally.
+          </p>
+        </div>
+      </header>
+
+      <section class="section-grid">
+        <form id="contact-form" class="panel stack">
+          <h2>Feedback</h2>
+          <label>
+            Name
+            <input name="name" required maxlength="120" />
+          </label>
+          <label>
+            Email
+            <input name="email" type="email" required maxlength="160" />
+          </label>
+          <label>
+            Message
+            <textarea name="message" data-markdown-editor required maxlength="4000" placeholder="Ask anything about CredStore."></textarea>
+          </label>
+          <button type="submit">Send Feedback</button>
+          <p id="contact-status" class="muted"></p>
+        </form>
+
+        <form id="complaint-form" class="panel stack">
+          <h2>Payment Complaint</h2>
+          <label>
+            Email
+            <input name="email" type="email" required maxlength="160" />
+          </label>
+          <label>
+            Transaction ID
+            <input name="transactionId" required maxlength="180" placeholder="UPI/PayPal/Card/Crypto transaction ID" />
+          </label>
+          <label>
+            Screenshot
+            <input name="screenshot" type="file" accept="image/png,image/jpeg,image/webp" />
+          </label>
+          <label>
+            Issue
+              <textarea name="message" data-markdown-editor required maxlength="4000" placeholder="Payment completed but key was not received."></textarea>
+          </label>
+          <button type="submit">Submit Complaint</button>
+          <p id="complaint-status" class="muted"></p>
+        </form>
+      </section>
+
+      <section class="panel stack">
+        <h2>Ticket Chat</h2>
+        <p class="muted">
+          Use your ticket ID and the same email used in the report. Messages support Markdown formatting.
+        </p>
+        <form id="ticket-chat-form" class="stack">
+          <div class="actions">
+            <label>
+              Ticket ID
+              <input name="ticketId" required maxlength="120" />
+            </label>
+            <label>
+              Email
+              <input name="email" type="email" required maxlength="160" />
+            </label>
+          </div>
+          <label>
+            Message
+            <textarea name="message" data-markdown-editor required maxlength="6000" placeholder="Write a reply in Markdown."></textarea>
+          </label>
+          <div class="actions">
+            <button type="submit">Send Message</button>
+            <button id="ticket-chat-load" class="secondary" type="button">Load Chat</button>
+          </div>
+          <p id="ticket-chat-status" class="muted"></p>
+        </form>
+        <div id="ticket-chat-thread" class="chat-thread empty">No chat loaded.</div>
+      </section>
+    </main>
+  </body>
+</html>
