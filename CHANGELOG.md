@@ -2,6 +2,22 @@
 
 All notable changes to CredStore will be documented in this file.
 
+## [1.0.18] - 2026-07-14
+
+### Added
+
+- Moved the public website into the `web/` publish tree with dedicated `/key`, `/vdp`, `/fnc`, and `/admin` routes.
+- Added GitHub Pages metadata files: `robots.txt`, `sitemap.xml`, and `.well-known/security.txt`.
+- Added Cloudflare Worker source under `worker/` for license generation, support tickets, VDP tickets, admin responses,
+  ticket chat, hall of fame, and crypto payment metadata.
+- Added Markdown editing and preview support for feedback, complaints, VDP reports, admin responses, and ticket chat.
+- Added admin ticket chat with generated certificate PDF attachment support.
+
+### Changed
+
+- Kept Worker deployment code out of the public `web/` directory and excluded Worker/local Wrangler state from npm
+  packages.
+
 ## [1.0.17] - 2026-07-14
 
 ### Fixed

@@ -14,10 +14,15 @@ build/
 coverage/
 *.tsbuildinfo
 next-env.d.ts
+*.tgz
+*.bak
+README.md.bak
 
 # Local environment and secrets
 .env
 .env.*
+.dev.vars
+.dev.vars.*
 *.pem
 *.key
 *.keystore
@@ -45,5 +50,7 @@ yarn-error.log*
 # cloudflare config
 
 wrangler.toml
-workers/
 .wrangler/
+**/.wrangler/
+**/wrangler-*.log
+worker/

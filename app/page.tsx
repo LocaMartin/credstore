@@ -83,7 +83,7 @@ import {
 } from "lucide-react"
 import { ResetCredStore } from "@/components/reset-button"
 
-const APP_VERSION = "1.0.17"
+const APP_VERSION = "1.0.18"
 const MAX_UNLOCK_DELAY_MS = 30000
 const MAX_FAILED_UNLOCKS = 10
 const FREE_SYNC_DEVICE_LIMIT = 5
@@ -891,6 +891,17 @@ export default function CredStore() {
   const nativeBiometricLabel = biometricLabelForResult(biometricAvailability)
   const canUseFingerprint = biometricTypeAllowed("fingerprint", biometricAvailability)
   const canUseFace = biometricTypeAllowed("face", biometricAvailability)
+  const savedFingerprintSlot = useMemo(
+    () => vaultRecord?.keySlots.find((slot) => slot.enabled && slot.type === "fingerprint" && slot.biometricKey) || null,
+    [vaultRecord],
+  )
+  const savedFaceSlot = useMemo(
+    () => vaultRecord?.keySlots.find((slot) => slot.enabled && slot.type === "face" && slot.biometricKey) || null,
+    [vaultRecord],
+  )
+  const biometricRegistrationHint = biometricAvailable
+    ? "Biometric hardware is available. Register Fingerprint or Face below to enable biometric login."
+    : describeBiometricAvailability(biometricAvailability)
   const maxSyncDevices = activeLicense?.maxDevices || FREE_SYNC_DEVICE_LIMIT
   const syncDeviceCount = vaultData.metadata?.syncedDevices.length || 1
   const syncLimitLabel = activeLicense
@@ -949,7 +960,9 @@ export default function CredStore() {
     const boot = async () => {
       const storedTheme = await readStoredValue(THEME_STORAGE_KEY)
       if (storedTheme && storedTheme in THEMES) setTheme(storedTheme as ThemeName)
-      setHasVault(Boolean(await readStoredValue(VAULT_STORAGE_KEY)))
+      const storedVaultRecord = parseVault(await readStoredValue(VAULT_STORAGE_KEY))
+      setHasVault(Boolean(storedVaultRecord))
+      setVaultRecord(storedVaultRecord)
 
       const storedInstallationId = await readStoredValue(INSTALLATION_ID_STORAGE_KEY)
       const nextInstallationId = storedInstallationId || createId()
@@ -1174,7 +1187,6 @@ export default function CredStore() {
     async (type: "fingerprint" | "face") => {
       const target = type === "fingerprint" ? "login-fingerprint" : "login-face"
       const label = type === "face" ? "Face" : nativeBiometricLabel
-      setBiometricUi({ target, phase: "running", mode: "login", label })
       if (!biometricAvailable) {
         setBiometricMessage(describeBiometricAvailability(biometricAvailability))
         setBiometricUi({ target: null, phase: "idle" })
@@ -1193,11 +1205,16 @@ export default function CredStore() {
         )
 
         if (!storedVault || !slot?.biometricKey) {
-          setBiometricMessage(`No ${type === "fingerprint" ? "fingerprint" : "face"} master key is saved yet.`)
+          const methodName = type === "fingerprint" ? "fingerprint" : "face"
+          const registerAction = type === "fingerprint" ? "Register Fingerprint" : "Register Face"
+          setBiometricMessage(
+            `No ${methodName} master key is registered. Unlock with your master key, open Settings, then tap ${registerAction}.`,
+          )
           setBiometricUi({ target: null, phase: "idle" })
           return
         }
 
+        setBiometricUi({ target, phase: "running", mode: "login", label })
         const secret = await getBiometricSecret(slot.id, slot.biometricKey)
 
         await unlockWithVaultKey(storedVault, base64ToBytes(secret))
@@ -1340,7 +1357,6 @@ export default function CredStore() {
       const target = type === "fingerprint" ? "register-fingerprint" : "register-face"
       const displayLabel = type === "face" ? "Face" : nativeBiometricLabel
       const label = `${displayLabel} master key`
-      setBiometricUi({ target, phase: "running", mode: "register", label: displayLabel })
 
       if (!biometricAvailable) {
         setBiometricMessage(describeBiometricAvailability(biometricAvailability))
@@ -1354,6 +1370,7 @@ export default function CredStore() {
       }
 
       try {
+        setBiometricUi({ target, phase: "running", mode: "register", label: displayLabel })
         const biometricKey = await createBiometricSecret(slotId, bytesToBase64(vaultKey))
         const nextRecord: VaultRecord = {
           ...vaultRecord,
@@ -1711,26 +1728,36 @@ export default function CredStore() {
             </Button>
             <p className="text-center text-xs text-gray-400">AES-256-GCM encrypted</p>
             <div className="grid grid-cols-2 gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                className="border-white/20 bg-white/5 text-xs text-white hover:bg-white/10"
-                onClick={() => handleBiometricUnlock("fingerprint")}
-                disabled={biometricUi.phase === "running" || !canUseFingerprint}
-              >
-                {biometricButtonIcon("login-fingerprint", <Fingerprint className="mr-2 h-4 w-4" />)}
-                {nativeBiometricLabel === "Touch ID" ? "Touch ID" : "Fingerprint"}
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                className="border-white/20 bg-white/5 text-xs text-white hover:bg-white/10"
-                onClick={() => handleBiometricUnlock("face")}
-                disabled={biometricUi.phase === "running" || !canUseFace}
-              >
-                {biometricButtonIcon("login-face", <ScanFace className="mr-2 h-4 w-4" />)}
-                Face
-              </Button>
+              <div className="space-y-1">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full border-white/20 bg-white/5 text-xs text-white hover:bg-white/10"
+                  onClick={() => handleBiometricUnlock("fingerprint")}
+                  disabled={biometricUi.phase === "running" || !canUseFingerprint}
+                >
+                  {biometricButtonIcon("login-fingerprint", <Fingerprint className="mr-2 h-4 w-4" />)}
+                  {nativeBiometricLabel === "Touch ID" ? "Touch ID" : "Fingerprint"}
+                </Button>
+                <p className={`text-center text-[11px] ${savedFingerprintSlot ? "text-emerald-300" : "text-gray-400"}`}>
+                  {savedFingerprintSlot ? "Registered" : "Not registered"}
+                </p>
+              </div>
+              <div className="space-y-1">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full border-white/20 bg-white/5 text-xs text-white hover:bg-white/10"
+                  onClick={() => handleBiometricUnlock("face")}
+                  disabled={biometricUi.phase === "running" || !canUseFace}
+                >
+                  {biometricButtonIcon("login-face", <ScanFace className="mr-2 h-4 w-4" />)}
+                  Face
+                </Button>
+                <p className={`text-center text-[11px] ${savedFaceSlot ? "text-emerald-300" : "text-gray-400"}`}>
+                  {savedFaceSlot ? "Registered" : "Not registered"}
+                </p>
+              </div>
             </div>
             <p className="text-center text-xs text-gray-400">{describeBiometricAvailability(biometricAvailability)}</p>
           </CardContent>
@@ -1974,7 +2001,7 @@ export default function CredStore() {
                         disabled={biometricUi.phase === "running" || !canUseFingerprint}
                       >
                         {biometricButtonIcon("register-fingerprint", <Fingerprint className="mr-1 h-3 w-3" />)}
-                        {nativeBiometricLabel === "Touch ID" ? "Touch ID" : "Fingerprint"}
+                        Register {nativeBiometricLabel === "Touch ID" ? "Touch ID" : "Fingerprint"}
                       </Button>
                       <Button
                         onClick={() => addNativePlaceholder("face")}
@@ -1983,10 +2010,25 @@ export default function CredStore() {
                         disabled={biometricUi.phase === "running" || !canUseFace}
                       >
                         {biometricButtonIcon("register-face", <ScanFace className="mr-1 h-3 w-3" />)}
-                        Face
+                        Register Face
                       </Button>
                     </div>
-                    <p className="text-xs text-gray-400">{describeBiometricAvailability(biometricAvailability)}</p>
+                    <div className="grid gap-2 rounded-md border border-white/10 bg-black/10 p-2 text-xs sm:grid-cols-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-gray-300">Fingerprint key</span>
+                        <Badge className={savedFingerprintSlot ? "bg-emerald-500/20 text-emerald-200" : "bg-white/10 text-gray-300"}>
+                          {savedFingerprintSlot ? "Registered" : "Not registered"}
+                        </Badge>
+                      </div>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-gray-300">Face key</span>
+                        <Badge className={savedFaceSlot ? "bg-emerald-500/20 text-emerald-200" : "bg-white/10 text-gray-300"}>
+                          {savedFaceSlot ? "Registered" : "Not registered"}
+                        </Badge>
+                      </div>
+                    </div>
+                    <p className="text-xs text-gray-400">{biometricRegistrationHint}</p>
+                    {biometricMessage && <p className="text-xs text-amber-300">{biometricMessage}</p>}
                   </section>
                   </div>
                   <div className="space-y-4">
@@ -2114,6 +2156,41 @@ export default function CredStore() {
                       >
                         Add
                       </Button>
+                    </div>
+                  </section>
+                  <section className="space-y-3 rounded-md border border-white/10 bg-white/5 p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <Label className="text-xs">Legal & Security</Label>
+                      <Badge className="bg-white/10 text-gray-300">Offline docs</Badge>
+                    </div>
+                    <p className="text-xs text-gray-400">
+                      CredStore public code is AGPLv3-or-later. Pro and Enterprise features are governed by the
+                      commercial EULA. Vault data stays local; CredStore has no cloud vault and no master-key recovery.
+                    </p>
+                    <div className="grid gap-2 text-xs">
+                      <div className="rounded-md border border-white/10 bg-black/10 p-2">
+                        <div className="flex items-center gap-2 text-gray-200">
+                          <ShieldCheck className="h-3 w-3" />
+                          Security architecture
+                        </div>
+                        <p className="mt-1 break-all font-mono text-[11px] text-gray-400">SECURITY.md</p>
+                      </div>
+                      <div className="rounded-md border border-white/10 bg-black/10 p-2">
+                        <div className="flex items-center gap-2 text-gray-200">
+                          <Key className="h-3 w-3" />
+                          Commercial license terms
+                        </div>
+                        <p className="mt-1 break-all font-mono text-[11px] text-gray-400">LICENSE-PRO.md</p>
+                      </div>
+                      <div className="rounded-md border border-white/10 bg-black/10 p-2">
+                        <div className="flex items-center gap-2 text-gray-200">
+                          <Database className="h-3 w-3" />
+                          Privacy, terms, and pricing
+                        </div>
+                        <p className="mt-1 break-all font-mono text-[11px] text-gray-400">
+                          docs/legal/PRIVACY.md, docs/legal/TERMS.md, docs/website/PRICING.md
+                        </p>
+                      </div>
                     </div>
                   </section>
                   <section className="space-y-2 rounded-md border border-red-400/30 bg-red-500/10 p-3">

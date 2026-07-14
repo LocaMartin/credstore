@@ -4,11 +4,11 @@
   <img src="./.res/text.svg" alt="CredStore">
 </div>
 
-<p align="center"><b>1.0.17</b></p>
+<p align="center"><b>1.0.18</b></p>
 
 CredStore is a strictly offline personal credential manager for desktop, web, and Android.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: AGPLv3](https://img.shields.io/badge/License-AGPLv3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 [![TypeScript 5.9.3](https://img.shields.io/badge/TypeScript-5.9.3-007ACC?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Next.js 16.2.10](https://img.shields.io/badge/Next.js-16.2.10-000000?logo=next.js&logoColor=white)](https://nextjs.org/)
 [![React 19.2.7](https://img.shields.io/badge/React-19.2.7-20232A?logo=react&logoColor=61DAFB)](https://react.dev/)
@@ -43,8 +43,7 @@ npm install -g github.com:LocaMartin/credstore
 ### Windows
 
 ```powershell
-# Not available from the official winget community source until a winget-pkgs manifest is accepted.
-# Use the GitHub Releases installer for now.
+winget install credstore
 ```
 
 `winget install credstore` will not work until CredStore is accepted into the official winget package index.
@@ -151,13 +150,14 @@ Development builds may use `localhost` for Next.js and Electron dev mode.
 
 ## Dual-Licensing & Why Sponsor CredStore?
 
-CredStore is fundamentally built on a zero-knowledge, client-side open-source architecture. The core codebase is proudly
-licensed under the permissive MIT License because transparency is non-negotiable in security tools.
+CredStore is fundamentally built on a zero-knowledge, client-side open-source architecture. The public repository is
+licensed under AGPLv3-or-later because transparency and reciprocal source availability matter for security tools.
 
 However, building cross-platform environments, maintaining native security wrappers like Android Keystore and Electron
 sandbox isolation, and hosting packages on official storefronts incurs real-world platform fees.
 
-We balance this using an Open-Core model based on convenience and scale.
+We balance this using a dual-license open-core model based on convenience and scale. Public repository code is governed
+by the root `LICENSE`; closed-source Pro and Enterprise code is governed by `LICENSE-PRO.md`.
 
 ### 1. Frictionless Distribution vs. Manual Compilation
 

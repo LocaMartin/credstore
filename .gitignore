@@ -16,6 +16,8 @@
 # production
 /build
 /dist/
+*.tgz
+*.bak
 
 # android
 /android/.gradle/
@@ -24,6 +26,7 @@
 
 # misc
 .DS_Store
+Thumbs.db
 *.pem
 *.key
 *.keystore
@@ -38,6 +41,8 @@ yarn-error.log*
 .env
 .env.*
 .env*.local
+.dev.vars
+.dev.vars.*
 
 # vercel
 .vercel
@@ -49,5 +54,6 @@ next-env.d.ts
 # cloudflare config
 
 wrangler.toml
-workers/
 .wrangler/
+**/.wrangler/
+**/wrangler-*.log

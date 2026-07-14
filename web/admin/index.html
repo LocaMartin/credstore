@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CredStore Admin</title>
+    <meta name="robots" content="noindex, nofollow" />
+    <link rel="icon" href="../res/img/logo.svg" />
+    <link rel="stylesheet" href="../res/css/index.css" />
+    <script src="https://accounts.google.com/gsi/client" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js" defer></script>
+    <script src="../res/js/site.js" defer></script>
+  </head>
+  <body class="admin-page is-forbidden">
+    <main>
+      <header class="hero compact-hero">
+        <nav class="topbar">
+          <a class="brand" href="/credstore/">
+            <img src="../res/img/logo.svg" alt="CredStore" />
+            <strong>CredStore Admin</strong>
+          </a>
+          <div class="top-actions">
+            <a href="/credstore/">Home</a>
+          </div>
+        </nav>
+      </header>
+
+      <section class="forbidden panel stack">
+        <p class="eyebrow">403</p>
+        <h1>Admin access required.</h1>
+        <p class="muted">
+          This page is private. Sign in with an allowlisted Google account. The Cloudflare Worker must verify your ID
+          token before any feedback, complaint, VDP, or hall-of-fame data is loaded.
+        </p>
+        <div id="google-login"></div>
+        <p id="admin-status" class="muted">403 admin access denied until verification passes.</p>
+      </section>
+
+      <section class="admin-shell panel stack">
+        <div class="admin-head">
+          <div>
+            <p class="eyebrow">Developer Console</p>
+            <h2>Admin Panel</h2>
+          </div>
+          <button id="admin-refresh" class="secondary" type="button">Refresh</button>
+        </div>
+
+        <div class="admin-grid">
+          <section class="stack">
+            <h3>Feedback</h3>
+            <div id="admin-feedback" class="list empty">Not loaded.</div>
+          </section>
+          <section class="stack">
+            <h3>Complaints</h3>
+            <div class="search-row">
+              <input id="transaction-search" placeholder="Search transaction ID" />
+              <button id="search-transaction" class="secondary" type="button">Search</button>
+            </div>
+            <div id="admin-complaints" class="list empty">Not loaded.</div>
+          </section>
+          <section class="stack">
+            <h3>VDP Tickets</h3>
+            <div id="admin-bugs" class="list empty">Not loaded.</div>
+          </section>
+        </div>
+
+        <div class="admin-grid three">
+          <form id="response-form" class="stack">
+            <h3>Ticket Response</h3>
+            <label>
+              Record ID
+              <input name="id" required maxlength="100" placeholder="Paste ticket ID" />
+            </label>
+            <label>
+              Status
+              <select name="status">
+                <option value="new">New</option>
+                <option value="reviewing">Reviewing</option>
+                <option value="waiting-payment-check">Waiting payment check</option>
+                <option value="resolved">Resolved</option>
+                <option value="rejected">Rejected</option>
+              </select>
+            </label>
+            <label>
+              Response note
+              <textarea name="response" data-markdown-editor maxlength="2000" placeholder="Admin response or follow-up note."></textarea>
+            </label>
+            <button type="submit">Save Response</button>
+            <p id="response-status" class="muted"></p>
+          </form>
+
+          <form id="certificate-form" class="certificate-panel stack">
+            <h3>Premium Certificate Builder</h3>
+            <label>
+              Hunter name
+              <input name="hunterName" required maxlength="120" placeholder="Bug hunter name" />
+            </label>
+            <label>
+              Severity
+              <select name="severity">
+                <option>Critical</option>
+                <option>High</option>
+                <option>Medium</option>
+                <option>Low</option>
+                <option>Informational</option>
+              </select>
+            </label>
+            <label>
+              Bug title
+              <input name="title" required maxlength="180" placeholder="Stored XSS in notes field" />
+            </label>
+            <label>
+              Certificate note
+              <textarea name="note" data-markdown-editor maxlength="1200">For responsible disclosure and helping improve CredStore security.</textarea>
+            </label>
+            <div class="actions">
+              <button type="submit">Download PDF</button>
+              <button id="save-template" class="secondary" type="button">Save Template</button>
+            </div>
+            <p id="certificate-status" class="muted"></p>
+          </form>
+
+          <form id="hall-form" class="stack">
+            <h3>Hall of Fame Entry</h3>
+            <label>
+              Name
+              <input name="name" required maxlength="120" />
+            </label>
+            <label>
+              Severity
+              <select name="severity">
+                <option>Critical</option>
+                <option>High</option>
+                <option>Medium</option>
+                <option>Low</option>
+                <option>Informational</option>
+              </select>
+            </label>
+            <label>
+              Recognition
+              <input name="title" required maxlength="180" />
+            </label>
+            <button type="submit">Publish Entry</button>
+            <p id="hall-status" class="muted"></p>
+          </form>
+        </div>
+
+        <section class="stack">
+          <h3>Published Hall of Fame</h3>
+          <div id="admin-hall" class="list empty">Not loaded.</div>
+        </section>
+
+        <section class="panel stack">
+          <h3>Ticket Chat</h3>
+          <p class="muted small">
+            Reply to feedback, complaint, and VDP tickets. Generate a certificate PDF first to attach it to the next
+            chat message.
+          </p>
+          <form id="admin-chat-form" class="stack">
+            <label>
+              Record ID
+              <input name="id" required maxlength="120" placeholder="Paste ticket ID" />
+            </label>
+            <label>
+              Message
+              <textarea name="message" data-markdown-editor maxlength="6000" placeholder="Write a Markdown reply."></textarea>
+            </label>
+            <input name="attachmentName" type="hidden" />
+            <input name="attachmentData" type="hidden" />
+            <div class="actions">
+              <button type="submit">Send Chat Reply</button>
+              <button id="admin-chat-load" class="secondary" type="button">Load Chat</button>
+            </div>
+            <p id="admin-chat-status" class="muted"></p>
+          </form>
+          <div id="admin-chat-thread" class="chat-thread empty">No chat loaded.</div>
+        </section>
+      </section>
+    </main>
+  </body>
+</html>

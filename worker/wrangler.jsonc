@@ -1,0 +1,19 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "credstore",
+  "main": "credstore-worker.js",
+  "compatibility_date": "2026-07-14",
+  "observability": {
+    "enabled": true
+  },
+  "vars": {
+    "ALLOW_UNPAID_LIFETIME": "false",
+    "GOOGLE_CLIENT_ID": "7346060566-39riegeih7sclmbcfenvqg9l2ggn0fnh.apps.googleusercontent.com"
+  },
+  "kv_namespaces": [
+    {
+      "binding": "CREDSTORE_DATA",
+      "id": "931e6cab7cb64c2ca46ec50a2391c76c"
+    }
+  ]
+}

@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CredStore License Key Generator</title>
+    <meta name="description" content="Generate signed offline CredStore Pro and Enterprise license keys." />
+    <link rel="icon" href="../res/img/logo.svg" />
+    <link rel="stylesheet" href="../res/css/index.css" />
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js" defer></script>
+    <script src="../res/js/site.js" defer></script>
+  </head>
+  <body>
+    <main>
+      <header class="hero compact-hero">
+        <nav class="topbar">
+          <a class="brand" href="/credstore/">
+            <img src="../res/img/logo.svg" alt="CredStore" />
+            <strong>CredStore Key</strong>
+          </a>
+          <div class="top-actions">
+            <a href="/credstore/">Home</a>
+            <a href="/credstore/vdp/">VDP</a>
+            <a href="/credstore/fnc/">Feedback</a>
+          </div>
+        </nav>
+        <div class="hero-copy">
+          <p class="eyebrow">Offline Enterprise License Generator</p>
+          <h1>Generate signed offline license keys.</h1>
+          <p class="muted">
+            Create a lifetime, trial, or enterprise token bound to a CredStore account identity. The app validates the
+            token locally without calling an activation server.
+          </p>
+        </div>
+      </header>
+
+      <section class="workspace">
+        <form id="license-form" class="panel stack">
+          <h2>Generate License</h2>
+          <label>
+            License type
+            <select name="kind">
+              <option value="lifetime">Lifetime Pro / Enterprise - $100</option>
+              <option value="trial">5-day free trial</option>
+            </select>
+          </label>
+          <label>
+            Company or buyer name
+            <input name="company" required maxlength="120" placeholder="Company Inc." />
+          </label>
+          <label>
+            Email
+            <input name="buyerEmail" type="email" required maxlength="160" placeholder="security@example.com" />
+          </label>
+          <label>
+            CredStore account identity
+            <input
+              name="accountIdentity"
+              required
+              maxlength="180"
+              placeholder="Paste from CredStore Settings > Enterprise License"
+            />
+          </label>
+          <div class="payment-grid" aria-label="Payment methods">
+            <a class="payment-card" data-payment-provider="upi" href="upi://pay?pa=locamartin@upi&pn=Loca%20Martin&am=100&cu=USD&tn=CredStore%20Lifetime%20License">
+              <span class="pay-logo upi-logo">UPI</span>
+              <strong>UPI</strong>
+            </a>
+            <a class="payment-card" data-payment-provider="paypal" href="https://paypal.me/locamartin/100" target="_blank" rel="noreferrer">
+              <span class="pay-logo paypal-logo">P</span>
+              <strong>PayPal</strong>
+            </a>
+            <a class="payment-card" data-payment-provider="card" href="https://paypal.me/locamartin/100" target="_blank" rel="noreferrer">
+              <span class="pay-logo card-logo">••••</span>
+              <strong>Card</strong>
+            </a>
+            <button class="payment-card" data-payment-provider="crypto" type="button" onclick="document.getElementById('crypto-note').hidden = !document.getElementById('crypto-note').hidden">
+              <span class="pay-logo crypto-logo">₿</span>
+              <strong>Crypto</strong>
+            </button>
+          </div>
+          <p id="crypto-note" class="muted small" hidden>
+            Crypto payments are handled manually for now. Use provider <strong>Crypto</strong> and paste the transaction
+            hash as the payment reference.
+          </p>
+          <label>
+            Payment provider
+            <select name="paymentProvider">
+              <option value="upi">UPI</option>
+              <option value="paypal">PayPal</option>
+              <option value="card">Card</option>
+              <option value="crypto">Crypto</option>
+              <option value="trial">Trial</option>
+            </select>
+          </label>
+          <label>
+            Payment reference
+            <input name="paymentReference" maxlength="180" placeholder="UPI/PayPal/Card/Crypto transaction ID" />
+          </label>
+          <button type="submit">Generate Signed License</button>
+          <p class="muted small">
+            Trial keys do not require payment reference. Paid licenses should be bound to the account identity shown in
+            CredStore Settings.
+          </p>
+        </form>
+
+        <section class="panel stack generated">
+          <h2>Generated Key</h2>
+          <div id="qr" class="premium-qr"></div>
+          <pre id="license-output">No license generated yet.</pre>
+          <div class="actions">
+            <button id="copy-license" class="secondary" type="button">Copy License</button>
+            <button id="download-license" class="secondary" type="button">Download .txt</button>
+          </div>
+          <p id="license-status" class="muted"></p>
+        </section>
+
+        <aside class="right-rail">
+          <section class="panel stack">
+            <h2>How Offline Validation Works</h2>
+            <p class="muted">
+              CredStore signs the license payload server-side and embeds only the public verification key in the app.
+              Users can activate premium features offline after receiving the QR or text key.
+            </p>
+          </section>
+          <section class="panel stack">
+            <h2>Anti-Sharing Model</h2>
+            <p class="muted">
+              The token is tied to the CredStore account identity. A copied QR fails in a different vault identity.
+            </p>
+          </section>
+        </aside>
+      </section>
+    </main>
+  </body>
+</html>

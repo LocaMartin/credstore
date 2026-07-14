@@ -1,0 +1,6 @@
+Contact: mailto:security@credstore.app
+Preferred-Languages: en
+Canonical: https://locamartin.github.io/credstore/.well-known/security.txt
+Policy: https://locamartin.github.io/credstore/vdp/
+Acknowledgments: https://locamartin.github.io/credstore/vdp/
+Expires: 2027-07-14T00:00:00Z
