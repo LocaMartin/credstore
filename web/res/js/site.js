@@ -165,15 +165,15 @@ function drawLogoQr(token) {
     return;
   }
 
-  window.QRCode.toCanvas(token, { width: 290, margin: 2, errorCorrectionLevel: "H" }, (error, canvas) => {
+  window.QRCode.toCanvas(token, { width: 336, margin: 3, errorCorrectionLevel: "M" }, (error, canvas) => {
     if (error) {
-      qr.textContent = "QR generation failed.";
+      qr.innerHTML = '<p class="muted small">QR generation failed. Copy the signed token below instead.</p>';
       return;
     }
     const context = canvas.getContext("2d");
     const logo = new Image();
     logo.onload = () => {
-      const size = 58;
+      const size = 48;
       const x = (canvas.width - size) / 2;
       const y = (canvas.height - size) / 2;
       context.fillStyle = "white";
@@ -191,6 +191,8 @@ function drawLogoQr(token) {
     logo.src = document.querySelector(".brand img")?.src || "/credstore/res/img/logo.svg";
   });
 }
+
+// PDF
 
 function generateCertificatePdf(values) {
   const jsPDF = window.jspdf?.jsPDF;
@@ -253,6 +255,8 @@ function generateCertificatePdf(values) {
   if (status) status.textContent = "PDF generated and attached to admin chat.";
   pdf.save(fileName);
 }
+
+// Hall of fame
 
 async function loadPublicHall() {
   try {

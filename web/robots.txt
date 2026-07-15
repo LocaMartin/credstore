@@ -1,5 +1,5 @@
 User-agent: *
 Allow: /credstore/
-Disallow: /credstore/admin/
+Disallow: /credstore/web/admin/
 
 Sitemap: https://locamartin.github.io/credstore/sitemap.xml

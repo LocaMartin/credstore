@@ -5,15 +5,15 @@
     <priority>1.0</priority>
   </url>
   <url>
-    <loc>https://locamartin.github.io/credstore/key/</loc>
+    <loc>https://locamartin.github.io/credstore/web/key/</loc>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://locamartin.github.io/credstore/vdp/</loc>
+    <loc>https://locamartin.github.io/credstore/web/vdp/</loc>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://locamartin.github.io/credstore/fnc/</loc>
+    <loc>https://locamartin.github.io/credstore/web/fnc/</loc>
     <priority>0.7</priority>
   </url>
 </urlset>

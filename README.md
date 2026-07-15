@@ -4,7 +4,7 @@
   <img src="./.res/text.svg" alt="CredStore">
 </div>
 
-<p align="center"><b>1.0.19</b></p>
+<p align="center"><b>1.0.20</b></p>
 
 CredStore is a strictly offline personal credential manager for desktop, web, and Android.
 
@@ -185,9 +185,9 @@ footprint to the internet.
 
 License generation happens outside the app:
 
-- GitHub Pages source: `web/license-portal/`
+- GitHub Pages source: `web/`
 - Cloudflare Worker signer: managed in the Cloudflare Dashboard, not committed to this repository.
-- Commercial/proprietary source area: `premium/pro/`
+- Commercial/proprietary source area: `pro`
 - Commercial license terms: `LICENSE-PRO.md`
 
 The static website must never contain the private signing key. The Cloudflare Worker signs tokens with

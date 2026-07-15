@@ -1,5 +1,6 @@
 package com.credstore.app;
 
+import android.content.SharedPreferences;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.Signature;
@@ -9,6 +10,8 @@ import android.graphics.Color;
 import android.os.Bundle;
 import android.view.Window;
 import android.view.WindowManager;
+import android.webkit.CookieManager;
+import android.webkit.WebStorage;
 
 import com.getcapacitor.BridgeActivity;
 
@@ -16,11 +19,19 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
 import java.security.MessageDigest;
+import java.security.KeyStore;
+import java.util.Enumeration;
 import java.util.Locale;
 
 public class MainActivity extends BridgeActivity {
+    private static final String INSTALL_STATE_PREF = "credstore_install_state";
+    private static final String FIRST_INSTALL_TIME_KEY = "first_install_time";
+    private static final String BIOMETRIC_KEY_PREFIX = "credstore_bio_";
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        clearRestoredStateAfterFreshInstall();
+
         if (!verifyAppSignature() || !verifyRuntimeEnvironment()) {
             finishAndRemoveTask();
             return;
@@ -38,6 +49,70 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(CredStoreBiometricPlugin.class);
         registerPlugin(CredStoreBluetoothPlugin.class);
         super.onCreate(savedInstanceState);
+    }
+
+    private void clearRestoredStateAfterFreshInstall() {
+        try {
+            PackageInfo packageInfo = getPackageManager().getPackageInfo(getPackageName(), 0);
+            long firstInstallTime = packageInfo.firstInstallTime;
+            SharedPreferences installState = getSharedPreferences(INSTALL_STATE_PREF, MODE_PRIVATE);
+            long storedFirstInstallTime = installState.getLong(FIRST_INSTALL_TIME_KEY, 0L);
+
+            if (storedFirstInstallTime != 0L && storedFirstInstallTime != firstInstallTime) {
+                clearLocalAppState();
+            }
+
+            getSharedPreferences(INSTALL_STATE_PREF, MODE_PRIVATE)
+                .edit()
+                .putLong(FIRST_INSTALL_TIME_KEY, firstInstallTime)
+                .apply();
+        } catch (Exception ignored) {
+            // If install-state inspection fails, keep normal startup behavior.
+        }
+    }
+
+    private void clearLocalAppState() {
+        clearSharedPreferences();
+        clearWebViewState();
+        clearBiometricKeys();
+    }
+
+    private void clearSharedPreferences() {
+        File prefsDir = new File(getApplicationInfo().dataDir, "shared_prefs");
+        File[] prefFiles = prefsDir.listFiles();
+        if (prefFiles == null) return;
+
+        for (File prefFile : prefFiles) {
+            String name = prefFile.getName();
+            if (!name.endsWith(".xml")) continue;
+            String prefName = name.substring(0, name.length() - 4);
+            getSharedPreferences(prefName, MODE_PRIVATE).edit().clear().commit();
+            prefFile.delete();
+        }
+    }
+
+    private void clearWebViewState() {
+        try {
+            WebStorage.getInstance().deleteAllData();
+            CookieManager.getInstance().removeAllCookies(null);
+            CookieManager.getInstance().flush();
+        } catch (Exception ignored) {
+            // WebView storage may be unavailable before the engine is initialized.
+        }
+    }
+
+    private void clearBiometricKeys() {
+        try {
+            KeyStore keyStore = KeyStore.getInstance("AndroidKeyStore");
+            keyStore.load(null);
+            Enumeration<String> aliases = keyStore.aliases();
+            while (aliases.hasMoreElements()) {
+                String alias = aliases.nextElement();
+                if (alias.startsWith(BIOMETRIC_KEY_PREFIX)) keyStore.deleteEntry(alias);
+            }
+        } catch (Exception ignored) {
+            // Keystore cleanup is best-effort.
+        }
     }
 
     private boolean verifyAppSignature() {

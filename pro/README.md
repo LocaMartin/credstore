@@ -1,10 +1,10 @@
 # CredStore Pro / Enterprise
 
-This directory is reserved for proprietary Pro and Enterprise features that should not be redistributed under the MIT
+This directory is reserved for proprietary Pro and Enterprise features that should not be redistributed under the AGPLv3
 community license.
 
 Current public app code contains only the offline license-verification foundation, profile metadata foundation, and
-community sync limits. Future paid-only implementations should live here and be governed by `../../LICENSE-PRO.md`.
+community sync limits. Future paid-only implementations should live here and be governed by `../LICENSE-PRO.md`.
 
 Planned Pro/Enterprise-only areas:
 

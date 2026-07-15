@@ -70,6 +70,7 @@ import {
   Loader2,
   Lock,
   LogOut,
+  Pencil,
   Plus,
   ShieldCheck,
   Square,
@@ -83,7 +84,7 @@ import {
 } from "lucide-react"
 import { ResetCredStore } from "@/components/reset-button"
 
-const APP_VERSION = "1.0.19"
+const APP_VERSION = "1.0.20"
 const MAX_UNLOCK_DELAY_MS = 30000
 const MAX_FAILED_UNLOCKS = 10
 const FREE_SYNC_DEVICE_LIMIT = 5
@@ -120,7 +121,7 @@ class QrRenderBoundary extends Component<{ children: ReactNode; onError: () => v
     if (this.state.failed) {
       return (
         <div className="grid min-h-[220px] place-items-center rounded-md border border-red-400/30 bg-red-950/10 p-4 text-sm text-red-900">
-          QR payload is too large. Generate a new one-time QR.
+          QR payload is too large for one QR. Use the one-time code instead.
         </div>
       )
     }
@@ -189,6 +190,8 @@ type SyncDoneState = {
   deviceName: string
   deviceId: string
 } | null
+
+type SettingsPanel = "settings" | "enterprise"
 
 declare global {
   interface Window {
@@ -702,26 +705,30 @@ function BiometricCeremony({ state }: { state: BiometricUiState }) {
   return (
     <div className="fixed inset-0 z-[70] grid place-items-center bg-black/70 p-4 backdrop-blur-sm">
       <div className="w-full max-w-sm rounded-lg border border-white/15 bg-slate-950/95 p-6 text-center text-white shadow-2xl">
-        <div className="mx-auto mb-5 grid h-44 w-44 place-items-center rounded-full border border-blue-300/30 bg-blue-950/30">
+        <div className="mx-auto mb-5 grid h-48 w-48 place-items-center rounded-full border border-blue-300/30 bg-blue-950/30 shadow-[0_0_60px_rgba(59,130,246,0.25)]">
           {state.phase === "success" ? (
             <div className="grid h-28 w-28 place-items-center rounded-full border-2 border-emerald-300 bg-emerald-400/10">
               <CheckCircle2 className="h-16 w-16 animate-pulse text-emerald-300" />
             </div>
           ) : isFace ? (
-            <div className="relative h-32 w-32">
-              <div className="absolute inset-3 rounded-[42%] border border-blue-300/70" />
+            <div className="relative h-36 w-36">
+              <div className="absolute inset-2 rounded-[42%] border border-blue-300/70 shadow-[0_0_35px_rgba(34,211,238,0.35)]" />
+              <div className="absolute inset-6 rounded-[44%] border border-cyan-300/25" />
               <div className="absolute left-8 right-8 top-12 h-2 rounded-full bg-blue-300/80" />
-              <div className="absolute bottom-10 left-12 right-12 h-1 rounded-full bg-blue-300/70" />
+              <div className="absolute bottom-12 left-12 right-12 h-1 rounded-full bg-blue-300/70" />
               <div className="absolute left-3 top-3 h-9 w-9 rounded-tl-lg border-l-4 border-t-4 border-white" />
               <div className="absolute right-3 top-3 h-9 w-9 rounded-tr-lg border-r-4 border-t-4 border-white" />
               <div className="absolute bottom-3 left-3 h-9 w-9 rounded-bl-lg border-b-4 border-l-4 border-white" />
               <div className="absolute bottom-3 right-3 h-9 w-9 rounded-br-lg border-b-4 border-r-4 border-white" />
               <div className="absolute left-5 right-5 top-1/2 h-1 animate-pulse rounded-full bg-cyan-300 shadow-[0_0_24px_rgba(103,232,249,0.9)]" />
+              <div className="absolute left-1/2 top-8 h-20 w-px -translate-x-1/2 bg-cyan-300/40" />
+              <div className="absolute left-8 top-1/2 h-px w-20 -translate-y-1/2 bg-cyan-300/40" />
             </div>
           ) : (
-            <div className="relative h-32 w-24">
+            <div className="relative h-36 w-28">
+              <div className="absolute inset-0 animate-ping rounded-full border border-blue-300/25" />
               <Fingerprint className="absolute inset-0 h-32 w-24 text-white/90" />
-              <div className="absolute bottom-3 left-1/2 h-24 w-1 -translate-x-1/2 animate-pulse rounded-full bg-blue-400 shadow-[0_0_24px_rgba(96,165,250,0.9)]" />
+              <div className="absolute bottom-3 left-1/2 h-28 w-1 -translate-x-1/2 animate-pulse rounded-full bg-blue-400 shadow-[0_0_24px_rgba(96,165,250,0.9)]" />
             </div>
           )}
         </div>
@@ -739,6 +746,7 @@ function CredentialCard({
   selectionMode,
   onToggleField,
   onCopy,
+  onEdit,
   onDelete,
   onToggleSelected,
   onLongPress,
@@ -749,6 +757,7 @@ function CredentialCard({
   selectionMode: boolean
   onToggleField: (fieldId: string) => void
   onCopy: (text: string) => void
+  onEdit: () => void
   onDelete: () => void
   onToggleSelected: () => void
   onLongPress: () => void
@@ -768,6 +777,12 @@ function CredentialCard({
       onPointerUp={clearLongPress}
       onPointerLeave={clearLongPress}
       onPointerCancel={clearLongPress}
+      onContextMenu={(event) => {
+        event.preventDefault()
+        clearLongPress()
+        if (selectionMode) onToggleSelected()
+        else onLongPress()
+      }}
       className={`border-white/10 shadow-sm hover:bg-white/10 ${
         selected ? "bg-blue-500/20 ring-2 ring-blue-300/60" : "bg-white/5"
       }`}
@@ -829,14 +844,24 @@ function CredentialCard({
               </p>
             )}
           </div>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={onDelete}
-            className="h-6 w-6 p-0 text-red-400 hover:bg-red-500/10 hover:text-red-300"
-          >
-            <Trash2 className="h-3 w-3" />
-          </Button>
+          <div className="flex flex-shrink-0 flex-col gap-1">
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={onEdit}
+              className="h-6 w-6 p-0 text-blue-200 hover:bg-blue-500/10 hover:text-blue-100"
+            >
+              <Pencil className="h-3 w-3" />
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={onDelete}
+              className="h-6 w-6 p-0 text-red-400 hover:bg-red-500/10 hover:text-red-300"
+            >
+              <Trash2 className="h-3 w-3" />
+            </Button>
+          </div>
         </div>
       </CardContent>
     </Card>
@@ -856,7 +881,9 @@ export default function CredStore() {
   const [selectedCredentialIds, setSelectedCredentialIds] = useState<Set<string>>(new Set())
   const [selectionMode, setSelectionMode] = useState(false)
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
+  const [editingCredentialId, setEditingCredentialId] = useState<string | null>(null)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  const [settingsPanel, setSettingsPanel] = useState<SettingsPanel>("settings")
   const [isSyncOpen, setIsSyncOpen] = useState(false)
   const [hasError, setHasError] = useState(false)
   const [theme, setTheme] = useState<ThemeName>("indigo")
@@ -865,6 +892,7 @@ export default function CredStore() {
   const [syncCode, setSyncCode] = useState("")
   const [syncMode, setSyncMode] = useState<"client" | "receiver">("client")
   const [syncPayload, setSyncPayload] = useState("")
+  const [manualSyncCode, setManualSyncCode] = useState("")
   const [syncMessage, setSyncMessage] = useState("")
   const [vaultData, setVaultData] = useState<VaultData>(normalizeVaultData(null))
   const [licenseToken, setLicenseToken] = useState("")
@@ -1282,6 +1310,60 @@ export default function CredStore() {
     setIsAddDialogOpen(false)
   }, [credentials, draft, persistVault])
 
+  const beginEditCredential = useCallback((credential: Credential) => {
+    setEditingCredentialId(credential.id)
+    setDraft({
+      title: credential.title,
+      category: credential.category,
+      fields: credential.fields.map((field) => ({ ...field })),
+      notes: credential.notes || "",
+    })
+    setIsAddDialogOpen(true)
+  }, [])
+
+  const closeCredentialEditor = useCallback((open: boolean) => {
+    setIsAddDialogOpen(open)
+    if (!open) {
+      setEditingCredentialId(null)
+      setDraft(createDraft())
+    }
+  }, [])
+
+  const saveCredential = useCallback(async () => {
+    if (!editingCredentialId) {
+      await addCredential()
+      return
+    }
+
+    const fields = draft.fields
+      .map((field) => ({
+        ...field,
+        key: sanitizeText(field.key, 80).trim(),
+        value: sanitizeText(field.value, 2000).trim(),
+      }))
+      .filter((field) => field.key && field.value)
+
+    const title = sanitizeText(draft.title, 120).trim()
+    if (!title || fields.length === 0) return
+
+    const nextCredentials = credentials.map((credential) =>
+      credential.id === editingCredentialId
+        ? {
+            ...credential,
+            title,
+            category: draft.category,
+            fields,
+            notes: sanitizeText(draft.notes, 5000).trim(),
+            updatedAt: new Date().toISOString(),
+          }
+        : credential,
+    )
+
+    setCredentials(nextCredentials)
+    await persistVault(nextCredentials)
+    closeCredentialEditor(false)
+  }, [addCredential, closeCredentialEditor, credentials, draft, editingCredentialId, persistVault])
+
   const deleteCredential = useCallback(
     async (id: string) => {
       const nextCredentials = credentials.filter((credential) => credential.id !== id)
@@ -1443,12 +1525,13 @@ export default function CredStore() {
       }
     }
 
-    setSyncPayload(createSyncPayload(sourceRecord))
-    setSyncCode("ONE-TIME")
+    const nextSyncPayload = createSyncPayload(sourceRecord)
+    setSyncPayload(nextSyncPayload)
+    setSyncCode(checksumText(nextSyncPayload).slice(0, 8).toUpperCase())
     setSyncMessage(
       selectedCredentialIds.size > 0
-        ? `One-time QR generated for ${selectedCredentialIds.size} selected item(s).`
-        : "One-time QR generated. Scan it on the receiver.",
+        ? `One-time QR/code generated for ${selectedCredentialIds.size} selected item(s).`
+        : "One-time QR/code generated. Scan it or copy the code to the receiver.",
     )
   }, [maxSyncDevices, selectedCredentialIds, vaultData, vaultKey, vaultRecord])
 
@@ -1488,6 +1571,7 @@ export default function CredStore() {
             deviceName: incomingVaultData.metadata?.syncedDevices[0]?.label || "Synced device",
             deviceId: incomingVaultData.metadata?.deviceId || "unknown",
           })
+          setManualSyncCode("")
           setSyncMessage(frameMessage)
         }
 
@@ -1792,7 +1876,7 @@ export default function CredStore() {
                   Sync
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-sm border-gray-700 bg-gray-900/95 text-white">
+              <DialogContent className="w-[calc(100vw-1rem)] max-w-md border-gray-700 bg-gray-900/95 text-white">
                 <DialogHeader>
                   <DialogTitle className="text-sm">Local Device Sync</DialogTitle>
                   <DialogDescription className="text-xs text-gray-400">
@@ -1822,6 +1906,7 @@ export default function CredStore() {
                       variant={syncMode === "receiver" ? "default" : "outline"}
                       onClick={() => {
                         setSyncMode("receiver")
+                        setManualSyncCode("")
                         setSyncMessage("Receiver ready. Tap Open Camera and Scan.")
                       }}
                       className={`text-xs transition-all active:scale-95 ${
@@ -1848,13 +1933,13 @@ export default function CredStore() {
                             <div className="inline-grid rounded-lg border border-slate-200 bg-white p-3 shadow-inner">
                               <QRCodeCanvas
                                 value={syncPayload}
-                                size={248}
-                                level="M"
-                                includeMargin={false}
+                                size={292}
+                                level="L"
+                                includeMargin
                                 imageSettings={{
                                   src: RUNTIME_LOGO_PATH,
-                                  height: 42,
-                                  width: 42,
+                                  height: 34,
+                                  width: 34,
                                   excavate: true,
                                 }}
                               />
@@ -1871,12 +1956,33 @@ export default function CredStore() {
                         onClick={createSyncCode}
                         className="w-full bg-gradient-to-r from-purple-500 to-blue-500 text-sm"
                       >
-                        Generate One-Time QR
+                        Generate One-Time QR / Code
                       </Button>
+                      {syncPayload && (
+                        <div className="space-y-2 rounded-md border border-white/10 bg-white/5 p-3">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-xs font-medium text-gray-200">One-time PC code</p>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() => copyToClipboard(syncPayload)}
+                              className="h-7 border-white/20 bg-white/5 px-2 text-xs text-white hover:bg-white/10"
+                            >
+                              <Copy className="mr-1 h-3 w-3" />
+                              Copy
+                            </Button>
+                          </div>
+                          <Textarea
+                            value={syncPayload}
+                            readOnly
+                            className="min-h-[72px] border-white/20 bg-black/20 font-mono text-[11px] text-white"
+                          />
+                        </div>
+                      )}
                       <div className="rounded-md border border-white/10 bg-white/5 p-3">
                         <p className="text-xs text-gray-300">
-                          Open receiver mode on the other device and scan this QR. CredStore imports the encrypted vault
-                          automatically after the QR is read.
+                          Open receiver mode on the other device. Scan the QR on phones/laptops with a camera, or copy this
+                          one-time code between PCs. CredStore merges data without erasing receiver data.
                         </p>
                       </div>
                       <p className="text-xs text-gray-300">
@@ -1885,17 +1991,45 @@ export default function CredStore() {
                     </div>
                   ) : (
                     <div className="space-y-3">
-                      <video
-                        ref={scanVideoRef}
-                        className="aspect-video w-full rounded-md border border-white/10 bg-black object-cover"
-                        muted
-                        playsInline
-                      />
+                      <div className="rounded-lg border border-white/15 bg-gradient-to-br from-white to-slate-100 p-3 text-center text-slate-950 shadow-xl shadow-black/30">
+                        <div className="mb-2 flex items-center justify-center gap-2 text-xs font-semibold text-slate-700">
+                          <LogoMark className="h-5 w-5" />
+                          CredStore Receiver
+                        </div>
+                        <video
+                          ref={scanVideoRef}
+                          className="aspect-square w-full rounded-lg border border-slate-200 bg-black object-cover shadow-inner"
+                          muted
+                          playsInline
+                        />
+                        <p className="mt-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                          Scan One-Time QR
+                        </p>
+                      </div>
                       <Button onClick={scanSyncQr} className="w-full bg-gradient-to-r from-purple-500 to-blue-500 text-sm">
                         Open Camera and Scan
                       </Button>
+                      <div className="space-y-2 rounded-md border border-white/10 bg-white/5 p-3">
+                        <Label className="text-xs">Enter one-time PC code</Label>
+                        <Textarea
+                          value={manualSyncCode}
+                          onChange={(event) => setManualSyncCode(event.target.value)}
+                          className="min-h-[84px] border-white/20 bg-black/20 font-mono text-[11px] text-white"
+                          placeholder="Paste one-time code from the client device"
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => importSyncPayload(manualSyncCode)}
+                          disabled={!manualSyncCode.trim()}
+                          className="w-full border-white/20 bg-white/5 text-sm text-white hover:bg-white/10"
+                        >
+                          Import One-Time Code
+                        </Button>
+                      </div>
                       <p className="text-xs text-gray-300">
-                        Scan the client QR. CredStore imports the encrypted vault automatically after a valid QR is read.
+                        Scan the client QR or paste the client code. CredStore imports the encrypted vault automatically
+                        after a valid QR/code is read.
                       </p>
                     </div>
                   )}
@@ -1920,283 +2054,351 @@ export default function CredStore() {
                   Settings
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-h-[calc(100dvh-4rem)] w-[calc(100vw-1rem)] max-w-5xl overflow-hidden border-gray-700 bg-gray-900/95 p-0 text-white">
+              <DialogContent
+                className={
+                  "h-dvh w-screen max-w-none overflow-hidden rounded-none border-gray-700 bg-gray-900/95 p-0 text-white " +
+                  "sm:h-auto sm:max-h-[calc(100dvh-4rem)] sm:w-[calc(100vw-1rem)] sm:max-w-5xl sm:rounded-lg"
+                }
+              >
                 <DialogHeader>
                   <div className="border-b border-white/10 px-5 py-4">
                     <DialogTitle className="text-sm">Settings</DialogTitle>
                     <DialogDescription className="text-xs text-gray-400">
-                      Theme, master keys, enterprise licensing, profiles, and reset are only available after login.
+                      Theme, master keys, legal controls, reset, and enterprise features are available after login.
                     </DialogDescription>
                   </div>
                 </DialogHeader>
-                <div className="grid max-h-[calc(100dvh-9rem)] gap-4 overflow-y-auto p-5 lg:grid-cols-2">
-                  <div className="space-y-4">
-                  <section className="space-y-2 rounded-md border border-white/10 bg-white/5 p-3">
-                    <Label className="text-xs">Theme</Label>
-                    <Select value={theme} onValueChange={(value) => changeTheme(value as ThemeName)}>
-                      <SelectTrigger className="border-white/20 bg-white/5 text-white">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="border-gray-700 bg-gray-900/95 text-white">
-                        <SelectItem value="indigo">Indigo</SelectItem>
-                        <SelectItem value="emerald">Emerald</SelectItem>
-                        <SelectItem value="slate">Slate</SelectItem>
-                        <SelectItem value="rose">Rose</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </section>
-                  <section className="space-y-2 rounded-md border border-white/10 bg-white/5 p-3">
-                    <Label className="text-xs">Master Keys</Label>
-                    <div className="space-y-2">
-                      {vaultRecord?.keySlots.map((slot) => (
-                        <div
-                          key={slot.id}
-                          className="flex items-center justify-between rounded-md border border-white/10 bg-white/5 px-3 py-2 text-xs"
-                        >
-                          <div className="flex items-center gap-2">
-                            {slot.type === "password" && <Key className="h-3 w-3" />}
-                            {slot.type === "fingerprint" && <Fingerprint className="h-3 w-3" />}
-                            {slot.type === "face" && <ScanFace className="h-3 w-3" />}
-                            <span>{slot.label}</span>
-                            {!slot.enabled && <Badge className="bg-white/10 text-gray-300">native plugin needed</Badge>}
-                          </div>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => removeMasterKey(slot.id)}
-                            className="h-6 px-2 text-red-300 hover:bg-red-500/10"
-                          >
-                            Remove
-                          </Button>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1fr]">
-                      <Input
-                        value={newMasterKeyLabel}
-                        onChange={(event) => setNewMasterKeyLabel(event.target.value)}
-                        className="border-white/20 bg-white/5 text-sm text-white"
-                        placeholder="Label"
-                      />
-                      <Input
-                        value={newMasterKey}
-                        onChange={(event) => setNewMasterKey(event.target.value)}
-                        className="border-white/20 bg-white/5 text-sm text-white"
-                        placeholder="New password key"
-                        type="password"
-                      />
-                    </div>
-                    <div className="grid grid-cols-3 gap-2">
-                      <Button
-                        onClick={addPasswordMasterKey}
-                        className="bg-gradient-to-r from-purple-500 to-blue-500 text-xs"
-                        disabled={!newMasterKey}
-                      >
-                        Add Password
-                      </Button>
-                      <Button
-                        onClick={() => addNativePlaceholder("fingerprint")}
-                        variant="outline"
-                        className="border-white/20 bg-white/5 text-xs text-white hover:bg-white/10"
-                        disabled={biometricUi.phase === "running" || !canUseFingerprint}
-                      >
-                        {biometricButtonIcon("register-fingerprint", <Fingerprint className="mr-1 h-3 w-3" />)}
-                        Register {nativeBiometricLabel === "Touch ID" ? "Touch ID" : "Fingerprint"}
-                      </Button>
-                      <Button
-                        onClick={() => addNativePlaceholder("face")}
-                        variant="outline"
-                        className="border-white/20 bg-white/5 text-xs text-white hover:bg-white/10"
-                        disabled={biometricUi.phase === "running" || !canUseFace}
-                      >
-                        {biometricButtonIcon("register-face", <ScanFace className="mr-1 h-3 w-3" />)}
-                        Register Face
-                      </Button>
-                    </div>
-                    <div className="grid gap-2 rounded-md border border-white/10 bg-black/10 p-2 text-xs sm:grid-cols-2">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-gray-300">Fingerprint key</span>
-                        <Badge className={savedFingerprintSlot ? "bg-emerald-500/20 text-emerald-200" : "bg-white/10 text-gray-300"}>
-                          {savedFingerprintSlot ? "Registered" : "Not registered"}
-                        </Badge>
-                      </div>
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-gray-300">Face key</span>
-                        <Badge className={savedFaceSlot ? "bg-emerald-500/20 text-emerald-200" : "bg-white/10 text-gray-300"}>
-                          {savedFaceSlot ? "Registered" : "Not registered"}
-                        </Badge>
-                      </div>
-                    </div>
-                    <p className="text-xs text-gray-400">{biometricRegistrationHint}</p>
-                    {biometricMessage && <p className="text-xs text-amber-300">{biometricMessage}</p>}
-                  </section>
+                <div className="grid h-[calc(100dvh-7rem)] grid-rows-[auto_minmax(0,1fr)] gap-4 p-4 sm:h-auto sm:max-h-[calc(100dvh-9rem)] sm:p-5">
+                  <div className="grid grid-cols-2 gap-2 rounded-md border border-white/10 bg-black/10 p-1">
+                    <Button
+                      type="button"
+                      variant={settingsPanel === "settings" ? "default" : "ghost"}
+                      onClick={() => setSettingsPanel("settings")}
+                      className={`h-9 text-xs transition-all active:scale-95 ${
+                        settingsPanel === "settings"
+                          ? "bg-gradient-to-r from-purple-500 to-blue-500 text-white shadow-lg"
+                          : "text-gray-200 hover:bg-white/10"
+                      }`}
+                    >
+                      Settings
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={settingsPanel === "enterprise" ? "default" : "ghost"}
+                      onClick={() => setSettingsPanel("enterprise")}
+                      className={`h-9 text-xs transition-all active:scale-95 ${
+                        settingsPanel === "enterprise"
+                          ? "bg-gradient-to-r from-purple-500 to-blue-500 text-white shadow-lg"
+                          : "text-gray-200 hover:bg-white/10"
+                      }`}
+                    >
+                      Enterprise
+                    </Button>
                   </div>
-                  <div className="space-y-4">
-                  <section className="space-y-2 rounded-md border border-white/10 bg-white/5 p-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <Label className="text-xs">Enterprise License</Label>
-                      <Badge className="bg-white/10 text-gray-200">
-                        {activeLicense ? activeLicense.plan : "Community"}
-                      </Badge>
-                    </div>
-                    <p className="text-xs text-gray-400">
-                      Community sync allows {FREE_SYNC_DEVICE_LIMIT} devices. A signed enterprise license unlocks higher offline limits.
-                    </p>
-                    <div className="rounded-md border border-white/10 bg-black/20 p-2">
-                      <div className="mb-1 flex items-center justify-between gap-2">
-                        <span className="text-xs text-gray-400">Account Identity</span>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => copyToClipboard(vaultData.metadata?.accountIdentity || "")}
-                          className="h-6 px-2 text-xs text-gray-200 hover:bg-white/10"
-                        >
-                          <Copy className="mr-1 h-3 w-3" />
-                          Copy
-                        </Button>
+
+                  <div className="min-h-0 overflow-y-auto overscroll-contain">
+                    {settingsPanel === "settings" ? (
+                      <div className="grid gap-4 lg:grid-cols-2">
+                        <section className="space-y-2 rounded-md border border-white/10 bg-white/5 p-3">
+                          <Label className="text-xs">Theme</Label>
+                          <Select value={theme} onValueChange={(value) => changeTheme(value as ThemeName)}>
+                            <SelectTrigger className="border-white/20 bg-white/5 text-white">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent className="border-gray-700 bg-gray-900/95 text-white">
+                              <SelectItem value="indigo">Indigo</SelectItem>
+                              <SelectItem value="emerald">Emerald</SelectItem>
+                              <SelectItem value="slate">Slate</SelectItem>
+                              <SelectItem value="rose">Rose</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </section>
+
+                        <section className="space-y-2 rounded-md border border-white/10 bg-white/5 p-3 lg:row-span-2">
+                          <Label className="text-xs">Master Keys</Label>
+                          <div className="space-y-2">
+                            {vaultRecord?.keySlots.map((slot) => (
+                              <div
+                                key={slot.id}
+                                className="flex items-center justify-between rounded-md border border-white/10 bg-white/5 px-3 py-2 text-xs"
+                              >
+                                <div className="flex items-center gap-2">
+                                  {slot.type === "password" && <Key className="h-3 w-3" />}
+                                  {slot.type === "fingerprint" && <Fingerprint className="h-3 w-3" />}
+                                  {slot.type === "face" && <ScanFace className="h-3 w-3" />}
+                                  <span>{slot.label}</span>
+                                  {!slot.enabled && <Badge className="bg-white/10 text-gray-300">native plugin needed</Badge>}
+                                </div>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => removeMasterKey(slot.id)}
+                                  className="h-6 px-2 text-red-300 hover:bg-red-500/10"
+                                >
+                                  Remove
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
+                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1fr]">
+                            <Input
+                              value={newMasterKeyLabel}
+                              onChange={(event) => setNewMasterKeyLabel(event.target.value)}
+                              className="border-white/20 bg-white/5 text-sm text-white"
+                              placeholder="Label"
+                            />
+                            <Input
+                              value={newMasterKey}
+                              onChange={(event) => setNewMasterKey(event.target.value)}
+                              className="border-white/20 bg-white/5 text-sm text-white"
+                              placeholder="New password key"
+                              type="password"
+                            />
+                          </div>
+                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                            <Button
+                              onClick={addPasswordMasterKey}
+                              className="bg-gradient-to-r from-purple-500 to-blue-500 text-xs"
+                              disabled={!newMasterKey}
+                            >
+                              Add Password
+                            </Button>
+                            <Button
+                              onClick={() => addNativePlaceholder("fingerprint")}
+                              variant="outline"
+                              className="border-white/20 bg-white/5 text-xs text-white hover:bg-white/10"
+                              disabled={biometricUi.phase === "running" || !canUseFingerprint}
+                            >
+                              {biometricButtonIcon("register-fingerprint", <Fingerprint className="mr-1 h-3 w-3" />)}
+                              Register {nativeBiometricLabel === "Touch ID" ? "Touch ID" : "Fingerprint"}
+                            </Button>
+                            <Button
+                              onClick={() => addNativePlaceholder("face")}
+                              variant="outline"
+                              className="border-white/20 bg-white/5 text-xs text-white hover:bg-white/10"
+                              disabled={biometricUi.phase === "running" || !canUseFace}
+                            >
+                              {biometricButtonIcon("register-face", <ScanFace className="mr-1 h-3 w-3" />)}
+                              Register Face
+                            </Button>
+                          </div>
+                          <div className="grid gap-2 rounded-md border border-white/10 bg-black/10 p-2 text-xs sm:grid-cols-2">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-gray-300">Fingerprint key</span>
+                              <Badge className={savedFingerprintSlot ? "bg-emerald-500/20 text-emerald-200" : "bg-white/10 text-gray-300"}>
+                                {savedFingerprintSlot ? "Registered" : "Not registered"}
+                              </Badge>
+                            </div>
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-gray-300">Face key</span>
+                              <Badge className={savedFaceSlot ? "bg-emerald-500/20 text-emerald-200" : "bg-white/10 text-gray-300"}>
+                                {savedFaceSlot ? "Registered" : "Not registered"}
+                              </Badge>
+                            </div>
+                          </div>
+                          <p className="text-xs text-gray-400">{biometricRegistrationHint}</p>
+                          {biometricMessage && <p className="text-xs text-amber-300">{biometricMessage}</p>}
+                        </section>
+
+                        <section className="space-y-3 rounded-md border border-white/10 bg-white/5 p-3">
+                          <div className="flex items-center justify-between gap-2">
+                            <Label className="text-xs">Legal & Security</Label>
+                            <Badge className="bg-white/10 text-gray-300">Offline docs</Badge>
+                          </div>
+                          <p className="text-xs text-gray-400">
+                            CredStore public code is AGPLv3-or-later. Pro and Enterprise features are governed by the
+                            commercial EULA. Vault data stays local; CredStore has no cloud vault and no master-key recovery.
+                          </p>
+                          <div className="grid gap-2 text-xs">
+                            <div className="rounded-md border border-white/10 bg-black/10 p-2">
+                              <div className="flex items-center gap-2 text-gray-200">
+                                <ShieldCheck className="h-3 w-3" />
+                                Security architecture
+                              </div>
+                              <p className="mt-1 break-all font-mono text-[11px] text-gray-400">SECURITY.md</p>
+                            </div>
+                            <div className="rounded-md border border-white/10 bg-black/10 p-2">
+                              <div className="flex items-center gap-2 text-gray-200">
+                                <Key className="h-3 w-3" />
+                                Commercial license terms
+                              </div>
+                              <p className="mt-1 break-all font-mono text-[11px] text-gray-400">LICENSE-PRO.md</p>
+                            </div>
+                            <div className="rounded-md border border-white/10 bg-black/10 p-2">
+                              <div className="flex items-center gap-2 text-gray-200">
+                                <Database className="h-3 w-3" />
+                                Privacy, terms, and pricing
+                              </div>
+                              <p className="mt-1 break-all font-mono text-[11px] text-gray-400">
+                                docs/legal/PRIVACY.md, docs/legal/TERMS.md, docs/website/PRICING.md
+                              </p>
+                            </div>
+                          </div>
+                        </section>
+
+                        <section className="space-y-3 rounded-md border border-white/10 bg-white/5 p-3">
+                          <div className="flex items-center justify-between gap-2">
+                            <Label className="text-xs">User Manual</Label>
+                            <Badge className="bg-white/10 text-gray-300">Offline</Badge>
+                          </div>
+                          <div className="space-y-2 text-xs text-gray-300">
+                            <p>
+                              Register: create a master password first, then add fingerprint or face unlock from Master
+                              Keys. The OS biometric screen confirms the real scan; CredStore stores only protected key
+                              material.
+                            </p>
+                            <p>
+                              Sync: choose Client to generate a one-time QR/code. On another unlocked device, choose
+                              Receiver and scan the QR or paste the PC code. Sync merges missing/newer records and does
+                              not erase receiver-only data.
+                            </p>
+                            <p>
+                              Select: long-press on Android or right-click on desktop to enter selection mode. Use Select
+                              All, Sync Selected, Delete Selected, or Clear.
+                            </p>
+                            <p>
+                              Backup: export or sync before resetting. CredStore has no server-side recovery for forgotten
+                              master keys.
+                            </p>
+                          </div>
+                        </section>
+
+                        <section className="space-y-2 rounded-md border border-red-400/30 bg-red-500/10 p-3 lg:col-span-2">
+                          <Label className="text-xs">Danger Zone</Label>
+                          <ResetCredStore />
+                        </section>
                       </div>
-                      <p className="break-all font-mono text-[11px] text-gray-300">
-                        {vaultData.metadata?.accountIdentity || "Unavailable"}
-                      </p>
-                    </div>
-                    {activeLicense && (
-                      <p className="text-xs text-gray-300">
-                        {activeLicense.company}: up to {activeLicense.maxDevices} devices and {activeLicense.maxUsers} users.
-                      </p>
+                    ) : (
+                      <div className="grid gap-4 lg:grid-cols-2">
+                        <section className="space-y-2 rounded-md border border-white/10 bg-white/5 p-3">
+                          <div className="flex items-center justify-between gap-2">
+                            <Label className="text-xs">Enterprise License</Label>
+                            <Badge className="bg-white/10 text-gray-200">
+                              {activeLicense ? activeLicense.plan : "Community"}
+                            </Badge>
+                          </div>
+                          <p className="text-xs text-gray-400">
+                            Community sync allows {FREE_SYNC_DEVICE_LIMIT} devices. A signed enterprise license unlocks higher offline limits.
+                          </p>
+                          <div className="rounded-md border border-white/10 bg-black/20 p-2">
+                            <div className="mb-1 flex items-center justify-between gap-2">
+                              <span className="text-xs text-gray-400">Account Identity</span>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => copyToClipboard(vaultData.metadata?.accountIdentity || "")}
+                                className="h-6 px-2 text-xs text-gray-200 hover:bg-white/10"
+                              >
+                                <Copy className="mr-1 h-3 w-3" />
+                                Copy
+                              </Button>
+                            </div>
+                            <p className="break-all font-mono text-[11px] text-gray-300">
+                              {vaultData.metadata?.accountIdentity || "Unavailable"}
+                            </p>
+                          </div>
+                          {activeLicense && (
+                            <p className="text-xs text-gray-300">
+                              {activeLicense.company}: up to {activeLicense.maxDevices} devices and {activeLicense.maxUsers} users.
+                            </p>
+                          )}
+                          <Textarea
+                            value={licenseToken}
+                            onChange={(event) => setLicenseToken(event.target.value)}
+                            className="min-h-[72px] border-white/20 bg-white/5 text-xs text-white"
+                            placeholder="Paste signed enterprise license token"
+                          />
+                          <video
+                            ref={licenseScanVideoRef}
+                            className="aspect-video w-full rounded-md border border-white/10 bg-black object-cover"
+                            muted
+                            playsInline
+                          />
+                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                            <Button
+                              type="button"
+                              onClick={scanLicenseQr}
+                              variant="outline"
+                              className="border-white/20 bg-white/5 text-xs text-white hover:bg-white/10"
+                            >
+                              <Camera className="mr-1 h-3 w-3" />
+                              Scan License QR
+                            </Button>
+                            <Button
+                              type="button"
+                              onClick={applyLicense}
+                              disabled={!licenseToken.trim()}
+                              className="bg-gradient-to-r from-purple-500 to-blue-500 text-xs"
+                            >
+                              <ShieldCheck className="mr-1 h-3 w-3" />
+                              Validate Offline License
+                            </Button>
+                          </div>
+                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() => {
+                                setLicenseToken(TEST_LICENSE_TOKEN)
+                                setLicenseMessage("Test license loaded. Press Validate Offline License.")
+                              }}
+                              className="border-white/20 bg-white/5 text-xs text-white hover:bg-white/10"
+                            >
+                              Load Test Key
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() => {
+                                setLicenseToken(TRIAL_LICENSE_TOKEN)
+                                setLicenseMessage("5-day trial license loaded. Press Validate Offline License.")
+                              }}
+                              className="border-white/20 bg-white/5 text-xs text-white hover:bg-white/10"
+                            >
+                              Load 5-Day Trial
+                            </Button>
+                          </div>
+                          {licenseMessage && <p className="text-xs text-gray-300">{licenseMessage}</p>}
+                        </section>
+
+                        <section className="space-y-2 rounded-md border border-white/10 bg-white/5 p-3">
+                          <Label className="text-xs">Employee Profiles</Label>
+                          <p className="text-xs text-gray-400">
+                            Profiles are stored inside the encrypted vault. Visibility rules use the profile/role metadata foundation for enterprise ACLs.
+                          </p>
+                          <div className="space-y-2">
+                            {vaultData.profiles?.map((profile) => (
+                              <div
+                                key={profile.id}
+                                className="flex items-center justify-between rounded-md border border-white/10 bg-white/5 px-3 py-2 text-xs"
+                              >
+                                <span>{profile.name}</span>
+                                <Badge className="bg-white/10 text-gray-300">
+                                  {vaultData.roles?.find((role) => role.id === profile.roleId)?.name || "Role"}
+                                </Badge>
+                              </div>
+                            ))}
+                          </div>
+                          <div className="grid grid-cols-[1fr_auto] gap-2">
+                            <Input
+                              value={newProfileName}
+                              onChange={(event) => setNewProfileName(event.target.value)}
+                              className="border-white/20 bg-white/5 text-sm text-white"
+                              placeholder="Employee profile name"
+                            />
+                            <Button
+                              type="button"
+                              onClick={addProfile}
+                              disabled={!newProfileName.trim()}
+                              className="bg-gradient-to-r from-purple-500 to-blue-500 text-xs"
+                            >
+                              Add
+                            </Button>
+                          </div>
+                        </section>
+                      </div>
                     )}
-                    <Textarea
-                      value={licenseToken}
-                      onChange={(event) => setLicenseToken(event.target.value)}
-                      className="min-h-[72px] border-white/20 bg-white/5 text-xs text-white"
-                      placeholder="Paste signed enterprise license token"
-                    />
-                    <video
-                      ref={licenseScanVideoRef}
-                      className="aspect-video w-full rounded-md border border-white/10 bg-black object-cover"
-                      muted
-                      playsInline
-                    />
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                      <Button
-                        type="button"
-                        onClick={scanLicenseQr}
-                        variant="outline"
-                        className="border-white/20 bg-white/5 text-xs text-white hover:bg-white/10"
-                      >
-                        <Camera className="mr-1 h-3 w-3" />
-                        Scan License QR
-                      </Button>
-                      <Button
-                        type="button"
-                        onClick={applyLicense}
-                        disabled={!licenseToken.trim()}
-                        className="bg-gradient-to-r from-purple-500 to-blue-500 text-xs"
-                      >
-                        <ShieldCheck className="mr-1 h-3 w-3" />
-                        Validate Offline License
-                      </Button>
-                    </div>
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => {
-                          setLicenseToken(TEST_LICENSE_TOKEN)
-                          setLicenseMessage("Test license loaded. Press Validate Offline License.")
-                        }}
-                        className="border-white/20 bg-white/5 text-xs text-white hover:bg-white/10"
-                      >
-                        Load Test Key
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => {
-                          setLicenseToken(TRIAL_LICENSE_TOKEN)
-                          setLicenseMessage("5-day trial license loaded. Press Validate Offline License.")
-                        }}
-                        className="border-white/20 bg-white/5 text-xs text-white hover:bg-white/10"
-                      >
-                        Load 5-Day Trial
-                      </Button>
-                    </div>
-                    {licenseMessage && <p className="text-xs text-gray-300">{licenseMessage}</p>}
-                  </section>
-                  <section className="space-y-2 rounded-md border border-white/10 bg-white/5 p-3">
-                    <Label className="text-xs">Employee Profiles</Label>
-                    <p className="text-xs text-gray-400">
-                      Profiles are stored inside the encrypted vault. Visibility rules use the profile/role metadata foundation for enterprise ACLs.
-                    </p>
-                    <div className="space-y-2">
-                      {vaultData.profiles?.map((profile) => (
-                        <div
-                          key={profile.id}
-                          className="flex items-center justify-between rounded-md border border-white/10 bg-white/5 px-3 py-2 text-xs"
-                        >
-                          <span>{profile.name}</span>
-                          <Badge className="bg-white/10 text-gray-300">
-                            {vaultData.roles?.find((role) => role.id === profile.roleId)?.name || "Role"}
-                          </Badge>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="grid grid-cols-[1fr_auto] gap-2">
-                      <Input
-                        value={newProfileName}
-                        onChange={(event) => setNewProfileName(event.target.value)}
-                        className="border-white/20 bg-white/5 text-sm text-white"
-                        placeholder="Employee profile name"
-                      />
-                      <Button
-                        type="button"
-                        onClick={addProfile}
-                        disabled={!newProfileName.trim()}
-                        className="bg-gradient-to-r from-purple-500 to-blue-500 text-xs"
-                      >
-                        Add
-                      </Button>
-                    </div>
-                  </section>
-                  <section className="space-y-3 rounded-md border border-white/10 bg-white/5 p-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <Label className="text-xs">Legal & Security</Label>
-                      <Badge className="bg-white/10 text-gray-300">Offline docs</Badge>
-                    </div>
-                    <p className="text-xs text-gray-400">
-                      CredStore public code is AGPLv3-or-later. Pro and Enterprise features are governed by the
-                      commercial EULA. Vault data stays local; CredStore has no cloud vault and no master-key recovery.
-                    </p>
-                    <div className="grid gap-2 text-xs">
-                      <div className="rounded-md border border-white/10 bg-black/10 p-2">
-                        <div className="flex items-center gap-2 text-gray-200">
-                          <ShieldCheck className="h-3 w-3" />
-                          Security architecture
-                        </div>
-                        <p className="mt-1 break-all font-mono text-[11px] text-gray-400">SECURITY.md</p>
-                      </div>
-                      <div className="rounded-md border border-white/10 bg-black/10 p-2">
-                        <div className="flex items-center gap-2 text-gray-200">
-                          <Key className="h-3 w-3" />
-                          Commercial license terms
-                        </div>
-                        <p className="mt-1 break-all font-mono text-[11px] text-gray-400">LICENSE-PRO.md</p>
-                      </div>
-                      <div className="rounded-md border border-white/10 bg-black/10 p-2">
-                        <div className="flex items-center gap-2 text-gray-200">
-                          <Database className="h-3 w-3" />
-                          Privacy, terms, and pricing
-                        </div>
-                        <p className="mt-1 break-all font-mono text-[11px] text-gray-400">
-                          docs/legal/PRIVACY.md, docs/legal/TERMS.md, docs/website/PRICING.md
-                        </p>
-                      </div>
-                    </div>
-                  </section>
-                  <section className="space-y-2 rounded-md border border-red-400/30 bg-red-500/10 p-3">
-                    <Label className="text-xs">Danger Zone</Label>
-                    <ResetCredStore />
-                  </section>
                   </div>
                 </div>
               </DialogContent>
@@ -2232,9 +2434,15 @@ export default function CredStore() {
                   <SelectItem value="other">Other</SelectItem>
                 </SelectContent>
               </Select>
-              <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+              <Dialog open={isAddDialogOpen} onOpenChange={closeCredentialEditor}>
                 <DialogTrigger asChild>
-                  <Button className="h-8 bg-gradient-to-r from-purple-500 to-blue-500 px-3 text-sm text-white hover:from-purple-600 hover:to-blue-600">
+                  <Button
+                    onClick={() => {
+                      setEditingCredentialId(null)
+                      setDraft(createDraft())
+                    }}
+                    className="h-8 bg-gradient-to-r from-purple-500 to-blue-500 px-3 text-sm text-white hover:from-purple-600 hover:to-blue-600"
+                  >
                     <Plus className="mr-1 h-3 w-3" />
                     Add
                   </Button>
@@ -2247,7 +2455,9 @@ export default function CredStore() {
                   }
                 >
                   <DialogHeader className="px-6 pb-3 pt-6">
-                    <DialogTitle className="text-sm">Add Credential</DialogTitle>
+                    <DialogTitle className="text-sm">
+                      {editingCredentialId ? "Edit Credential" : "Add Credential"}
+                    </DialogTitle>
                     <DialogDescription className="text-xs text-gray-400">
                       Store named fields like username, password, API secret, URL, token, or anything else.
                     </DialogDescription>
@@ -2345,14 +2555,14 @@ export default function CredStore() {
                       />
                     </div>
                     <Button
-                      onClick={addCredential}
+                      onClick={saveCredential}
                       className={
                         "sticky bottom-0 h-10 w-full bg-gradient-to-r from-purple-500 to-blue-500 " +
                         "text-sm shadow-[0_-12px_24px_rgba(17,24,39,0.95)]"
                       }
                       disabled={!draft.title || !draft.fields.some((field) => field.key && field.value)}
                     >
-                      Add Credential
+                      {editingCredentialId ? "Save Changes" : "Add Credential"}
                     </Button>
                   </div>
                 </DialogContent>
@@ -2429,6 +2639,7 @@ export default function CredStore() {
                 selectionMode={selectionMode}
                 onToggleField={toggleFieldVisibility}
                 onCopy={copyToClipboard}
+                onEdit={() => beginEditCredential(credential)}
                 onDelete={() => deleteCredential(credential.id)}
                 onToggleSelected={() => toggleCredentialSelected(credential.id)}
                 onLongPress={() => enterSelectionMode(credential.id)}

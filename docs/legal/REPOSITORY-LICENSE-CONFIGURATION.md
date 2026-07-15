@@ -13,7 +13,7 @@ This note is operational guidance, not legal advice.
 
 1. Replace the root `LICENSE` file with the full AGPLv3 license text.
 2. Add a clear license section to `README.md` stating that the public code is AGPLv3-or-later.
-3. Keep proprietary code in a clearly marked directory such as `/pro` or `premium/pro`.
+3. Keep proprietary code in a clearly marked directory such as `/pro`.
 4. Add `LICENSE-PRO.md` for the commercial terms that govern closed-source Pro code.
 5. Make each source file header consistent where practical:
    `SPDX-License-Identifier: AGPL-3.0-or-later`.

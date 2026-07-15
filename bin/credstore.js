@@ -14,7 +14,7 @@ if (args.includes("--version") || args.includes("-version") || args.includes("-v
   process.exit(0)
 }
 
-if (args.includes("--help") || args.includes("-h")) {
+if (args.includes("--help") || args.includes("-help") || args.includes("-h")) {
   console.log(`CredStore ${pkg.version}
 
 Usage:
@@ -26,8 +26,10 @@ Usage:
   credstore --uninstall-desktop
                        Remove CredStore from the Linux app launcher
   credstore -debug     Launch with debug logging and developer tools
+  credstore --debug    Launch with debug logging and developer tools
   credstore -version   Print the installed version
   credstore --version  Print the installed version
+  credstore -help      Show this help
   credstore --help     Show this help
 `)
   process.exit(0)

@@ -2,12 +2,27 @@
 
 All notable changes to CredStore will be documented in this file.
 
+## [1.0.20] - 2026-07-15
+
+### Fixed
+
+- Added an Android reinstall guard that clears restored WebView storage, shared preferences, and CredStore biometric
+  keystore aliases when old app data appears after a fresh install.
+- Fixed Android biometric registration crash handling so fingerprint/face actions reject cleanly instead of throwing from
+  the prompt launch path.
+- Reduced QR density for web license QR and app sync QR by using compressed payloads with lower QR correction overhead and
+  smaller logo excavation.
+- Added a PC-to-PC one-time sync code path beside QR scanning so desktops without cameras can paste the encrypted sync
+  payload and merge data.
+- Added right-click desktop selection to match Android long-press selection for sync/delete workflows.
+- Added an offline user manual inside Settings.
+
 ## [1.0.19] - 2026-07-15
 
 ### Fixed
 
-- Fixed GitHub Pages route publishing for `/credstore/key/`, `/credstore/vdp/`, `/credstore/fnc/`, and
-  `/credstore/admin/` when Pages serves from the repository root.
+- Fixed GitHub Pages route publishing for `/credstore/web/key/`, `/credstore/web/vdp/`, `/credstore/web/fnc/`, and
+  `/credstore/web/admin/` when Pages serves from the repository root.
 - Added root-level `robots.txt`, `sitemap.xml`, and `.well-known/security.txt` mirrors so crawler and security metadata
   resolve on the live site.
 
@@ -149,10 +164,10 @@ All notable changes to CredStore will be documented in this file.
 
 ### Added
 
-- Added a separate GitHub Pages license portal source at `web/license-portal/`.
+- Added a separate GitHub Pages license portal source under `web/`.
 - Added Cloudflare Worker license signer source for initial deployment.
 - Added built-in test and 5-day trial license tokens for local premium feature testing.
-- Added `LICENSE-PRO.md` and `premium/pro/` for future commercial-only features under a separate license.
+- Added `LICENSE-PRO.md` and `/pro` for future commercial-only features under a separate license.
 - Expanded README dual-licensing, sponsorship, anti-piracy, and open-core guidance.
 
 ## [1.0.8] - 2026-07-10

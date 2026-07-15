@@ -57,6 +57,7 @@ public class CredStoreBiometricPlugin extends Plugin {
         try {
             Cipher cipher = createCipher(slotId, Cipher.ENCRYPT_MODE, null);
             authenticate(
+                call,
                 "Save biometric master key",
                 "Confirm to protect this vault key with your device biometrics.",
                 cipher,
@@ -104,6 +105,7 @@ public class CredStoreBiometricPlugin extends Plugin {
         try {
             Cipher cipher = createCipher(slotId, Cipher.DECRYPT_MODE, Base64.decode(iv, Base64.NO_WRAP));
             authenticate(
+                call,
                 "Unlock CredStore",
                 "Confirm to unlock this vault with your biometric master key.",
                 cipher,
@@ -137,6 +139,7 @@ public class CredStoreBiometricPlugin extends Plugin {
     }
 
     private void authenticate(
+        PluginCall call,
         String title,
         String subtitle,
         Cipher cipher,
@@ -144,21 +147,26 @@ public class CredStoreBiometricPlugin extends Plugin {
     ) {
         Activity bridgeActivity = getActivity();
         if (!(bridgeActivity instanceof FragmentActivity)) {
-            throw new IllegalStateException("Biometric prompt requires a FragmentActivity");
+            call.reject("Biometric prompt requires a FragmentActivity");
+            return;
         }
 
         FragmentActivity activity = (FragmentActivity) bridgeActivity;
         Executor executor = ContextCompat.getMainExecutor(activity);
         activity.runOnUiThread(() -> {
-            BiometricPrompt prompt = new BiometricPrompt(activity, executor, callback);
-            BiometricPrompt.PromptInfo promptInfo = new BiometricPrompt.PromptInfo.Builder()
-                .setTitle(title)
-                .setSubtitle(subtitle)
-                .setAllowedAuthenticators(AUTHENTICATORS)
-                .setNegativeButtonText("Cancel")
-                .build();
+            try {
+                BiometricPrompt prompt = new BiometricPrompt(activity, executor, callback);
+                BiometricPrompt.PromptInfo promptInfo = new BiometricPrompt.PromptInfo.Builder()
+                    .setTitle(title)
+                    .setSubtitle(subtitle)
+                    .setAllowedAuthenticators(AUTHENTICATORS)
+                    .setNegativeButtonText("Cancel")
+                    .build();
 
-            prompt.authenticate(promptInfo, new BiometricPrompt.CryptoObject(cipher));
+                prompt.authenticate(promptInfo, new BiometricPrompt.CryptoObject(cipher));
+            } catch (Exception error) {
+                call.reject("Unable to show biometric prompt", error);
+            }
         });
     }
 

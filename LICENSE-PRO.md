@@ -5,7 +5,7 @@ Effective date: July 14, 2026
 This Commercial End User License Agreement ("Agreement") governs access to and use of the
 closed-source CredStore Pro and CredStore Enterprise features, including any code, binaries,
 license tooling, documentation, and assets distributed from or derived from the `/pro` or
-`premium/pro` directories ("Commercial Software").
+`/pro` directories ("Commercial Software").
 
 This template is provided for project operations and should be reviewed by qualified counsel before
 use with paying customers.
