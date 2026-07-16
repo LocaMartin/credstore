@@ -25,6 +25,10 @@ Usage:
                        Add CredStore to the Linux app launcher
   credstore --uninstall-desktop
                        Remove CredStore from the Linux app launcher
+  credstore --clean-vault --yes
+                       Delete CredStore vault data and desktop app data on this computer
+  credstore --clean-uninstall --yes
+                       Delete vault/app data before uninstalling the npm package
   credstore -debug     Launch with debug logging and developer tools
   credstore --debug    Launch with debug logging and developer tools
   credstore -version   Print the installed version
@@ -88,27 +92,54 @@ if (args.includes("--uninstall-desktop")) {
   process.exit(0)
 }
 
+const shouldClean = args.includes("--clean-vault") || args.includes("--clean-uninstall")
+
+if (shouldClean) {
+  const cleanArgs = args.includes("--clean-uninstall") ? ["--clean-uninstall"] : []
+  if (args.includes("--yes")) cleanArgs.push("--yes")
+  if (args.includes("-y")) cleanArgs.push("-y")
+  if (args.includes("--dry-run")) cleanArgs.push("--dry-run")
+  if (args.includes("--mobile")) cleanArgs.push("--mobile")
+
+  const cleaner = path.join(appRoot, "scripts", "clean-vault.js")
+  const child = spawn(process.execPath, [cleaner, ...cleanArgs], {
+    stdio: "inherit",
+    env: process.env,
+  })
+
+  child.on("error", (error) => {
+    console.error(`Failed to clean CredStore vault data: ${error.message}`)
+    process.exit(1)
+  })
+
+  child.on("exit", (code) => {
+    process.exit(code || 0)
+  })
+}
+
 const electronArgs = []
 const appArgs = []
 
-for (const arg of args) {
-  if (arg === "--no-sandbox") {
-    electronArgs.push(arg)
-  } else if (arg === "-debug" || arg === "--debug") {
-    appArgs.push("--credstore-debug")
-  } else {
-    appArgs.push(arg)
+if (!shouldClean) {
+  for (const arg of args) {
+    if (arg === "--no-sandbox") {
+      electronArgs.push(arg)
+    } else if (arg === "-debug" || arg === "--debug") {
+      appArgs.push("--credstore-debug")
+    } else {
+      appArgs.push(arg)
+    }
   }
-}
 
-if (process.env.CREDSTORE_NO_SANDBOX === "1" && !electronArgs.includes("--no-sandbox")) {
-  electronArgs.push("--no-sandbox")
-}
+  if (process.env.CREDSTORE_NO_SANDBOX === "1" && !electronArgs.includes("--no-sandbox")) {
+    electronArgs.push("--no-sandbox")
+  }
 
-launch().catch((error) => {
-  console.error(`Failed to launch CredStore: ${error.message}`)
-  process.exit(1)
-})
+  launch().catch((error) => {
+    console.error(`Failed to launch CredStore: ${error.message}`)
+    process.exit(1)
+  })
+}
 
 async function launch() {
   const electronPath = await resolveElectron()

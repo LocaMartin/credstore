@@ -1,0 +1,103 @@
+# CredStore User Manual
+
+CredStore is an offline credential manager for storing passwords, API keys, tokens, account notes, and other secrets in
+an encrypted local vault.
+
+## Create a Vault
+
+1. Open CredStore.
+2. Enter a new master password.
+3. Use a long, unique password that includes lowercase letters, uppercase letters, numbers, and symbols.
+4. Unlock once to create the encrypted vault.
+
+CredStore has no recovery server and no master-key escrow. If every master key is forgotten, the vault cannot be
+recovered.
+
+## Unlock
+
+Enter any enabled password master key to unlock the vault. After repeated failed attempts, CredStore applies a local
+lockout delay to slow guessing.
+
+On supported platforms, biometric unlock can be registered after the vault is created. Biometric unlock stores only
+protected vault-key material. The operating system performs the fingerprint, Touch ID, or face authentication prompt.
+
+## Add Credentials
+
+Use Add to create a credential. A credential can contain any number of fields, including username, password, URL, API
+secret, database password, recovery code, token, or custom labels.
+
+Mark sensitive fields as secret so they stay masked until copied or revealed. Notes are stored inside the encrypted
+vault with the rest of the credential.
+
+## Edit and Delete
+
+Open a saved credential to edit fields, notes, and category. Delete removes the credential from the local vault.
+
+On desktop, right-click a credential to enter selection mode. On Android, long-press a credential. Selection mode supports
+Select All, Sync Selected, Delete Selected, and Clear.
+
+## Master Keys
+
+Settings contains the Master Keys section. Add a backup password before relying on a single unlock path.
+
+Password master keys wrap the same random vault key. Removing a password key deletes that unlock path, but does not
+delete the encrypted credential data as long as another enabled key remains.
+
+## Biometric Unlock
+
+Register Fingerprint, Touch ID, or Face unlock from Master Keys when the platform reports support. If the button is
+disabled, the current operating system or build does not expose a tested key-release bridge.
+
+Linux fingerprint unlock and Windows Hello unlock remain disabled until their native bridges are implemented and tested.
+
+## Local Sync
+
+CredStore sync is offline and device-to-device.
+
+1. Unlock the sending device.
+2. Choose Client to create a one-time QR or pasteable code.
+3. Unlock the receiving device.
+4. Choose Receiver and scan the QR or paste the code.
+5. Review the confirmation after import.
+
+Sync merges missing or newer records and does not erase receiver-only data. Community sync supports up to 5 local sync
+devices.
+
+## Enterprise License
+
+The Enterprise tab accepts signed offline license tokens. A valid license can raise device and user limits without
+contacting a cloud vault.
+
+Trial and enterprise licenses include clock rollback protection. Keep the device clock accurate before validating a
+license.
+
+## Backup
+
+CredStore does not operate cloud backup. Keep your own encrypted backups or sync copies on devices you control.
+
+Before resetting or uninstalling, sync or back up anything you still need. Reset and clean uninstall are destructive.
+
+## Reset
+
+Use Settings, Danger Zone, Reset to delete local vault storage and native biometric key material. The reset action is for
+starting fresh when you no longer need the current local vault or cannot unlock it.
+
+After reset, CredStore reloads and starts from an empty vault state.
+
+## Clean Uninstall
+
+For the npm desktop launcher, clean local app data before removing the global package:
+
+```bash
+credstore --clean-uninstall --yes
+npm uninstall -g credstore
+```
+
+Preview desktop cleanup paths first:
+
+```bash
+credstore --clean-vault --dry-run
+```
+
+On Linux, `npm uninstall -D credstore` only targets a local project devDependency. It does not remove a global binary from
+`/usr/local/bin`.

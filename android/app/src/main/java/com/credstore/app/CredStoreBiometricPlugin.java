@@ -138,6 +138,28 @@ public class CredStoreBiometricPlugin extends Plugin {
         }
     }
 
+    @PluginMethod
+    public void deleteSecret(PluginCall call) {
+        String slotId = call.getString("slotId");
+
+        if (slotId == null) {
+            call.reject("slotId is required");
+            return;
+        }
+
+        try {
+            KeyStore keyStore = KeyStore.getInstance(KEYSTORE_PROVIDER);
+            keyStore.load(null);
+            String alias = KEY_PREFIX + slotId;
+            if (keyStore.containsAlias(alias)) {
+                keyStore.deleteEntry(alias);
+            }
+            call.resolve();
+        } catch (Exception error) {
+            call.reject("Unable to delete biometric key", error);
+        }
+    }
+
     private void authenticate(
         PluginCall call,
         String title,

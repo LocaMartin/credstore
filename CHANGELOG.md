@@ -2,6 +2,16 @@
 
 All notable changes to CredStore will be documented in this file.
 
+## [1.0.21] - 2026-07-16
+
+### Fixed
+
+- Fixed Android biometric crashes on devices that expose only Class 2 weak biometrics by bypassing the Capgo
+  `NativeBiometric` crypto-auth activity on Android.
+- Android biometric vault unlock now uses only CredStore's strong-biometric Android Keystore plugin. Weak biometric
+  devices are reported as unavailable instead of launching a crashing authentication flow.
+- Added a clear migration error for older Android biometric keys created with the previous provider path.
+
 ## [1.0.20] - 2026-07-15
 
 ### Fixed

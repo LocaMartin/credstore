@@ -1,5 +1,6 @@
 import UIKit
 import Capacitor
+import Security
 
 @UIApplicationMain
 class AppDelegate: UIResponder, UIApplicationDelegate {
@@ -7,8 +8,28 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     var window: UIWindow?
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        // Override point for customization after application launch.
+        clearBiometricKeychainAfterReinstall()
         return true
+    }
+
+    private func clearBiometricKeychainAfterReinstall() {
+        let installMarker = "credstore_install_seen"
+        let defaults = UserDefaults.standard
+        if defaults.bool(forKey: installMarker) {
+            return
+        }
+
+        deleteKeychainService("CapgoNativeBiometricData")
+        deleteKeychainService("CapgoNativeBiometricSecureData")
+        defaults.set(true, forKey: installMarker)
+    }
+
+    private func deleteKeychainService(_ service: String) {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service
+        ]
+        SecItemDelete(query as CFDictionary)
     }
 
     func applicationWillResignActive(_ application: UIApplication) {

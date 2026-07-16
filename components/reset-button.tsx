@@ -1,6 +1,8 @@
 "use client"
 
 import { useState } from "react"
+import { NativeBiometric } from "@capgo/capacitor-native-biometric"
+import { Capacitor, registerPlugin } from "@capacitor/core"
 import { Button } from "@/components/ui/button"
 import {
   AlertDialog,
@@ -24,6 +26,62 @@ const resetKeys = [
   "credstore_license_last_seen_at",
 ]
 
+type ResetVaultRecord = {
+  keySlots?: Array<{
+    id?: string
+    biometricKey?: {
+      platform?: string
+    }
+  }>
+}
+
+type CredStoreBiometricPlugin = {
+  deleteSecret: (options: { slotId: string }) => Promise<void>
+}
+
+const CredStoreBiometric = registerPlugin<CredStoreBiometricPlugin>("CredStoreBiometric")
+
+async function readResetValue(key: string) {
+  try {
+    const { Preferences } = await import("@capacitor/preferences")
+    const result = await Preferences.get({ key })
+    if (result.value !== null) return result.value
+  } catch {
+    // Web and Electron fall back to localStorage.
+  }
+
+  return localStorage.getItem(key)
+}
+
+async function removeNativeBiometricKeys() {
+  const storedVault = await readResetValue("credstore_vault_v2")
+  if (!storedVault) return
+
+  let vault: ResetVaultRecord | null = null
+  try {
+    vault = JSON.parse(storedVault) as ResetVaultRecord
+  } catch {
+    return
+  }
+
+  const biometricSlots = (vault?.keySlots || []).filter((slot) => slot.id && slot.biometricKey)
+  await Promise.allSettled(
+    biometricSlots.map(async (slot) => {
+      const slotId = String(slot.id)
+      const platform = slot.biometricKey?.platform
+
+      if (Capacitor.isNativePlatform() && platform === "capgo-secure-data") {
+        await NativeBiometric.deleteData({ key: `credstore-vault-key-${slotId}` })
+        return
+      }
+
+      if (Capacitor.getPlatform() === "android" && platform === "android-keystore") {
+        await CredStoreBiometric.deleteSecret({ slotId })
+      }
+    }),
+  )
+}
+
 export function ResetCredStore() {
   const [isResetting, setIsResetting] = useState(false)
 
@@ -31,6 +89,8 @@ export function ResetCredStore() {
     setIsResetting(true)
     const reset = async () => {
       try {
+        await removeNativeBiometricKeys()
+
         try {
           const { Preferences } = await import("@capacitor/preferences")
           await Promise.all(resetKeys.map((key) => Preferences.remove({ key })))

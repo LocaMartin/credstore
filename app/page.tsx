@@ -21,6 +21,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
+import { MarkdownDocument } from "@/components/markdown-document"
 import {
   base64ToBytes,
   bytesToBase64,
@@ -55,11 +56,14 @@ import {
   type VaultRecord,
   type LicenseRecord,
   type BiometricKey,
+  type EnterpriseGroup,
+  type EnterpriseProfile,
 } from "@/lib/secure-vault"
 import {
   Camera,
   CheckCircle2,
   CheckSquare,
+  ChevronDown,
   Copy,
   Database,
   Eye,
@@ -73,18 +77,25 @@ import {
   Pencil,
   Plus,
   ShieldCheck,
+  Smartphone,
   Square,
   QrCode,
   ScanFace,
   Search,
   Settings,
   Trash2,
+  User,
+  Users,
   Wifi,
   X,
 } from "lucide-react"
 import { ResetCredStore } from "@/components/reset-button"
+import securityMarkdown from "@/SECURITY.md"
+import commercialLicenseMarkdown from "@/LICENSE-PRO.md"
+import privacyTermsPricingMarkdown from "@/docs/legal/PRIVACY-TERMS-PRICING.md"
+import userManualMarkdown from "@/docs/USER-MANUAL.md"
 
-const APP_VERSION = "1.0.20"
+const APP_VERSION = "1.0.21"
 const MAX_UNLOCK_DELAY_MS = 30000
 const MAX_FAILED_UNLOCKS = 10
 const FREE_SYNC_DEVICE_LIMIT = 5
@@ -94,6 +105,8 @@ const CREDSTORE_DEEPLINK_SCHEME = "credstore"
 const RUNTIME_LOGO_PATH = "./logo.svg"
 const LICENSE_CLOCK_STORAGE_KEY = "credstore_license_last_seen_at"
 const SYNC_QR_PREFIX = "cs1."
+const ADMIN_AUTH_LOCKOUT_MS = 30000
+const MAX_ADMIN_AUTH_FAILURES = 5
 
 ed25519Hashes.sha512Async = async (message) =>
   new Uint8Array(await crypto.subtle.digest("SHA-512", new Uint8Array(message).buffer))
@@ -102,6 +115,7 @@ type CredStoreBiometricPlugin = {
   isAvailable: () => Promise<BiometricAvailability>
   createSecret: (options: { slotId: string; secret: string }) => Promise<{ encrypted: string; iv: string }>
   getSecret: (options: { slotId: string; encrypted: string; iv: string }) => Promise<{ secret: string }>
+  deleteSecret: (options: { slotId: string }) => Promise<void>
 }
 
 const CredStoreBiometric = registerPlugin<CredStoreBiometricPlugin>("CredStoreBiometric")
@@ -135,6 +149,108 @@ const THEMES: Record<ThemeName, string> = {
   emerald: "from-emerald-950 via-teal-900 to-slate-900",
   slate: "from-slate-950 via-slate-900 to-zinc-900",
   rose: "from-rose-950 via-fuchsia-950 to-indigo-950",
+}
+
+const legalDocuments = [
+  {
+    title: "Security Architecture",
+    source: "SECURITY.md",
+    icon: ShieldCheck,
+    content: securityMarkdown,
+  },
+  {
+    title: "Commercial License Terms",
+    source: "LICENSE-PRO.md",
+    icon: Key,
+    content: commercialLicenseMarkdown,
+  },
+  {
+    title: "Privacy Terms, Pricing",
+    source: "docs/legal/PRIVACY-TERMS-PRICING.md",
+    icon: Database,
+    content: privacyTermsPricingMarkdown,
+  },
+] as const
+
+function LegalDocsSection() {
+  return (
+    <section className="space-y-3 rounded-md border border-white/10 bg-white/5 p-3">
+      <div className="flex items-center justify-between gap-2">
+        <Label className="text-xs">Legal & Security</Label>
+        <Badge className="bg-white/10 text-gray-300">Offline docs</Badge>
+      </div>
+      <p className="text-xs text-gray-400">
+        CredStore public code is AGPLv3-or-later. Pro and Enterprise features are governed by the commercial EULA.
+        Vault data stays local; CredStore has no cloud vault and no master-key recovery.
+      </p>
+      <div className="space-y-2">
+        {legalDocuments.map((document) => (
+          <DocDropdown
+            content={document.content}
+            icon={<document.icon className="h-3 w-3" />}
+            key={document.title}
+            source={document.source}
+            title={document.title}
+          />
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function UserManualSection() {
+  return (
+    <section className="space-y-3 rounded-md border border-white/10 bg-white/5 p-3 lg:col-span-2">
+      <div className="flex items-center justify-between gap-2">
+        <Label className="text-xs">User Manual</Label>
+        <Badge className="bg-white/10 text-gray-300">Offline</Badge>
+      </div>
+      <DocDropdown
+        content={userManualMarkdown}
+        icon={<Settings className="h-3 w-3" />}
+        source="docs/USER-MANUAL.md"
+        title="User Manual"
+        defaultOpen
+        tall
+      />
+    </section>
+  )
+}
+
+function DocDropdown({
+  content,
+  defaultOpen = false,
+  icon,
+  source,
+  tall = false,
+  title,
+}: {
+  content: string
+  defaultOpen?: boolean
+  icon: ReactNode
+  source: string
+  tall?: boolean
+  title: string
+}) {
+  return (
+    <details className="group rounded-md border border-white/10 bg-black/10 text-xs" open={defaultOpen}>
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2 text-gray-100">
+        <span className="flex min-w-0 items-center gap-2">
+          {icon}
+          <span className="truncate">{title}</span>
+        </span>
+        <span className="flex shrink-0 items-center gap-2 text-[11px] text-gray-400">
+          <span className="hidden font-mono sm:inline">{source}</span>
+          <ChevronDown className="h-3 w-3 transition-transform group-open:rotate-180" />
+        </span>
+      </summary>
+      <div className="border-t border-white/10 px-3 py-3">
+        <div className={tall ? "max-h-[320px] overflow-y-auto pr-2" : "max-h-[240px] overflow-y-auto pr-2"}>
+          <MarkdownDocument content={content} />
+        </div>
+      </div>
+    </details>
+  )
 }
 
 type BiometricAvailability = {
@@ -248,6 +364,39 @@ function base64UrlToBytes(value: string) {
   const normalized = value.replace(/-/g, "+").replace(/_/g, "/")
   const padded = normalized.padEnd(normalized.length + ((4 - (normalized.length % 4)) % 4), "=")
   return Uint8Array.from(atob(padded), (char) => char.charCodeAt(0))
+}
+
+function adminPasswordMeetsPolicy(value: string) {
+  return value.length >= 8 && /[a-z]/.test(value) && /[A-Z]/.test(value) && /\d/.test(value) && /[^A-Za-z0-9]/.test(value)
+}
+
+async function hashAdminPassword(password: string, salt = bytesToBase64Url(crypto.getRandomValues(new Uint8Array(24)))) {
+  const sourceKey = await crypto.subtle.importKey("raw", new TextEncoder().encode(password), { name: "PBKDF2" }, false, [
+    "deriveBits",
+  ])
+  const bits = await crypto.subtle.deriveBits(
+    {
+      name: "PBKDF2",
+      salt: base64UrlToBytes(salt),
+      iterations: 300000,
+      hash: "SHA-256",
+    },
+    sourceKey,
+    256,
+  )
+
+  return {
+    salt,
+    hash: bytesToBase64Url(new Uint8Array(bits)),
+  }
+}
+
+function bufferToBase64Url(buffer: ArrayBuffer) {
+  return bytesToBase64Url(new Uint8Array(buffer))
+}
+
+function credentialIdToBytes(value: string) {
+  return base64UrlToBytes(value)
 }
 
 function compactEncryptedPayload(payload: EncryptedPayload): CompactEncryptedPayload {
@@ -449,9 +598,32 @@ function biometricTypeAllowed(type: "fingerprint" | "face", result: BiometricAva
   return result.biometryType === BiometryType.FINGERPRINT || result.biometryType === BiometryType.TOUCH_ID
 }
 
+function isAndroidNativePlatform() {
+  return Capacitor.isNativePlatform() && Capacitor.getPlatform() === "android"
+}
+
 async function getBiometricAvailability(): Promise<BiometricAvailability> {
   if (Capacitor.isNativePlatform()) {
     const platform = Capacitor.getPlatform()
+
+    if (platform === "android") {
+      try {
+        const result = await CredStoreBiometric.isAvailable()
+        return result.available
+          ? {
+              ...result,
+              message: result.message || "Strong Android biometric unlock is available.",
+            }
+          : {
+              ...result,
+              message:
+                result.message ||
+                "CredStore requires Android Class 3 strong biometrics for encrypted vault-key unlock.",
+            }
+      } catch {
+        return { available: false, code: "PLUGIN_UNAVAILABLE" }
+      }
+    }
 
     try {
       const result = await NativeBiometric.isAvailable({ useFallback: false })
@@ -483,6 +655,11 @@ async function getBiometricAvailability(): Promise<BiometricAvailability> {
 
 async function createBiometricSecret(slotId: string, secret: string): Promise<BiometricKey> {
   if (Capacitor.isNativePlatform()) {
+    if (isAndroidNativePlatform()) {
+      const protectedSecret = await CredStoreBiometric.createSecret({ slotId, secret })
+      return { platform: "android-keystore", encrypted: protectedSecret.encrypted, iv: protectedSecret.iv }
+    }
+
     try {
       await NativeBiometric.setData({
         key: `credstore-vault-key-${slotId}`,
@@ -519,6 +696,10 @@ async function getBiometricSecret(slotId: string, biometricKey: BiometricKey): P
   }
 
   if (biometricKey.platform === "capgo-secure-data") {
+    if (isAndroidNativePlatform()) {
+      throw new Error("This Android biometric key uses an older provider. Remove it and register biometric unlock again.")
+    }
+
     const result = await NativeBiometric.getSecureData({
       key: `credstore-vault-key-${slotId}`,
       reason: "Unlock your CredStore vault",
@@ -741,6 +922,7 @@ function BiometricCeremony({ state }: { state: BiometricUiState }) {
 
 function CredentialCard({
   credential,
+  ownerLabel,
   visibleFields,
   selected,
   selectionMode,
@@ -752,6 +934,7 @@ function CredentialCard({
   onLongPress,
 }: {
   credential: Credential
+  ownerLabel?: string
   visibleFields: Set<string>
   selected: boolean
   selectionMode: boolean
@@ -806,6 +989,11 @@ function CredentialCard({
               <Badge variant="secondary" className="border-white/30 bg-white/20 px-1 py-0 text-xs text-white">
                 {credential.category}
               </Badge>
+              {ownerLabel && (
+                <Badge variant="secondary" className="border-emerald-300/30 bg-emerald-500/15 px-1 py-0 text-xs text-emerald-100">
+                  {ownerLabel}
+                </Badge>
+              )}
             </div>
             <div className="space-y-1 text-xs">
               {credential.fields.map((field) => {
@@ -899,6 +1087,13 @@ export default function CredStore() {
   const [licenseMessage, setLicenseMessage] = useState("")
   const [activeLicense, setActiveLicense] = useState<LicenseRecord | null>(null)
   const [newProfileName, setNewProfileName] = useState("")
+  const [activeProfileId, setActiveProfileId] = useState("")
+  const [newGroupName, setNewGroupName] = useState("")
+  const [selectedGroupId, setSelectedGroupId] = useState("")
+  const [selectedVisibilityCredentialId, setSelectedVisibilityCredentialId] = useState("")
+  const [adminPassword, setAdminPassword] = useState("")
+  const [adminAuthenticated, setAdminAuthenticated] = useState(false)
+  const [adminAuthMessage, setAdminAuthMessage] = useState("")
   const [unlockDelayUntil, setUnlockDelayUntil] = useState(0)
   const [failedUnlocks, setFailedUnlocks] = useState(0)
   const [biometricMessage, setBiometricMessage] = useState("")
@@ -935,6 +1130,18 @@ export default function CredStore() {
   const syncLimitLabel = activeLicense
     ? `${activeLicense.kind === "trial" ? "Trial" : "Enterprise"} sync limit: ${syncDeviceCount}/${maxSyncDevices} devices.`
     : `Free edition sync limit: ${syncDeviceCount}/${FREE_SYNC_DEVICE_LIMIT} devices.`
+  const adminProfile = vaultData.profiles?.find((profile) =>
+    vaultData.roles?.some((role) => role.id === profile.roleId && role.canManageProfiles),
+  )
+  const activeProfile = vaultData.profiles?.find((profile) => profile.id === activeProfileId) || adminProfile || vaultData.profiles?.[0]
+  const activeProfileGroups = useMemo(
+    () => (activeProfile ? (vaultData.groups || []).filter((group) => group.profileIds.includes(activeProfile.id)) : []),
+    [activeProfile, vaultData.groups],
+  )
+  const selectedVisibilityCredential =
+    credentials.find((credential) => credential.id === selectedVisibilityCredentialId) || credentials[0] || null
+  const adminAuthLockoutRemaining = Math.max(0, (vaultData.adminAuth?.lockoutUntil || 0) - Date.now())
+  const isAdminAuthLocked = adminAuthLockoutRemaining > 0
   const selectedCount = selectedCredentialIds.size
 
   const persistVault = useCallback(
@@ -963,6 +1170,29 @@ export default function CredStore() {
     [vaultData, vaultKey, vaultRecord],
   )
 
+  useEffect(() => {
+    const fallbackProfileId = adminProfile?.id || vaultData.profiles?.[0]?.id || ""
+    if (!activeProfileId && fallbackProfileId) {
+      setActiveProfileId(fallbackProfileId)
+      return
+    }
+
+    if (activeProfileId && !(vaultData.profiles || []).some((profile) => profile.id === activeProfileId)) {
+      setActiveProfileId(fallbackProfileId)
+    }
+  }, [activeProfileId, adminProfile?.id, vaultData.profiles])
+
+  useEffect(() => {
+    if (!selectedVisibilityCredentialId && credentials[0]) {
+      setSelectedVisibilityCredentialId(credentials[0].id)
+      return
+    }
+
+    if (selectedVisibilityCredentialId && !credentials.some((credential) => credential.id === selectedVisibilityCredentialId)) {
+      setSelectedVisibilityCredentialId(credentials[0]?.id || "")
+    }
+  }, [credentials, selectedVisibilityCredentialId])
+
   const lockVault = useCallback(() => {
     setIsLocked(true)
     setMasterPassword("")
@@ -981,6 +1211,10 @@ export default function CredStore() {
     setFailedUnlocks(0)
     setDraft(createDraft())
     setSyncPayload("")
+    setAdminAuthenticated(false)
+    setAdminPassword("")
+    setAdminAuthMessage("")
+    setActiveProfileId("")
     receivedSyncFramesRef.current = {}
   }, [])
 
@@ -1300,6 +1534,9 @@ export default function CredStore() {
       category: draft.category,
       fields,
       notes: sanitizeText(draft.notes, 5000).trim(),
+      ownerProfileId: draft.ownerProfileId || activeProfile?.id || adminProfile?.id,
+      visibleToProfileIds: draft.visibleToProfileIds || [],
+      visibleToGroupIds: draft.visibleToGroupIds || [],
       createdAt: now,
       updatedAt: now,
     }
@@ -1308,7 +1545,7 @@ export default function CredStore() {
     await persistVault(nextCredentials)
     setDraft(createDraft())
     setIsAddDialogOpen(false)
-  }, [credentials, draft, persistVault])
+  }, [activeProfile?.id, adminProfile?.id, credentials, draft, persistVault])
 
   const beginEditCredential = useCallback((credential: Credential) => {
     setEditingCredentialId(credential.id)
@@ -1317,9 +1554,12 @@ export default function CredStore() {
       category: credential.category,
       fields: credential.fields.map((field) => ({ ...field })),
       notes: credential.notes || "",
+      ownerProfileId: credential.ownerProfileId || activeProfile?.id || adminProfile?.id || "",
+      visibleToProfileIds: credential.visibleToProfileIds || [],
+      visibleToGroupIds: credential.visibleToGroupIds || [],
     })
     setIsAddDialogOpen(true)
-  }, [])
+  }, [activeProfile?.id, adminProfile?.id])
 
   const closeCredentialEditor = useCallback((open: boolean) => {
     setIsAddDialogOpen(open)
@@ -1354,6 +1594,9 @@ export default function CredStore() {
             category: draft.category,
             fields,
             notes: sanitizeText(draft.notes, 5000).trim(),
+            ownerProfileId: draft.ownerProfileId || credential.ownerProfileId,
+            visibleToProfileIds: draft.visibleToProfileIds || [],
+            visibleToGroupIds: draft.visibleToGroupIds || [],
             updatedAt: new Date().toISOString(),
           }
         : credential,
@@ -1703,8 +1946,137 @@ export default function CredStore() {
     }
   }, [credentials, licenseToken, persistVault, vaultData, vaultKey, vaultRecord, verifyLicenseToken])
 
+  const updateAdminAuth = useCallback(
+    async (adminAuth: NonNullable<VaultData["adminAuth"]>) => {
+      if (!vaultRecord || !vaultKey) return
+      await persistVault(credentials, vaultRecord, vaultKey, normalizeVaultData({ ...vaultData, adminAuth }))
+    },
+    [credentials, persistVault, vaultData, vaultKey, vaultRecord],
+  )
+
+  const setEnterpriseAdminPassword = useCallback(async () => {
+    if (!adminPasswordMeetsPolicy(adminPassword)) {
+      setAdminAuthMessage("Admin password needs 8+ chars with uppercase, lowercase, number, and symbol.")
+      return
+    }
+
+    const result = await hashAdminPassword(adminPassword)
+    await updateAdminAuth({
+      ...(vaultData.adminAuth || {}),
+      passwordHash: result.hash,
+      passwordSalt: result.salt,
+      failedAttempts: 0,
+      lockoutUntil: 0,
+      updatedAt: new Date().toISOString(),
+    })
+    setAdminAuthenticated(true)
+    setAdminPassword("")
+    setAdminAuthMessage("Admin password saved and authenticated.")
+  }, [adminPassword, updateAdminAuth, vaultData.adminAuth])
+
+  const authenticateEnterpriseAdmin = useCallback(async () => {
+    const auth = vaultData.adminAuth
+    if (!auth?.passwordHash || !auth.passwordSalt) {
+      await setEnterpriseAdminPassword()
+      return
+    }
+
+    if (Date.now() < (auth.lockoutUntil || 0)) {
+      setAdminAuthMessage("Admin authentication is temporarily locked. Wait and try again.")
+      return
+    }
+
+    const result = await hashAdminPassword(adminPassword, auth.passwordSalt)
+    if (result.hash === auth.passwordHash) {
+      await updateAdminAuth({ ...auth, failedAttempts: 0, lockoutUntil: 0, updatedAt: new Date().toISOString() })
+      setAdminAuthenticated(true)
+      setAdminPassword("")
+      setAdminAuthMessage("Admin authenticated.")
+      return
+    }
+
+    const failedAttempts = (auth.failedAttempts || 0) + 1
+    const lockoutUntil = failedAttempts >= MAX_ADMIN_AUTH_FAILURES ? Date.now() + ADMIN_AUTH_LOCKOUT_MS : 0
+    await updateAdminAuth({ ...auth, failedAttempts, lockoutUntil, updatedAt: new Date().toISOString() })
+    setAdminAuthenticated(false)
+    setAdminAuthMessage(
+      lockoutUntil
+        ? "Too many failed admin attempts. Locked for 30 seconds."
+        : `Invalid admin password. ${MAX_ADMIN_AUTH_FAILURES - failedAttempts} attempts left.`,
+    )
+  }, [adminPassword, setEnterpriseAdminPassword, updateAdminAuth, vaultData.adminAuth])
+
+  const registerAdminPasskey = useCallback(async () => {
+    if (!vaultRecord || !vaultKey || typeof navigator === "undefined" || !navigator.credentials?.create) {
+      setAdminAuthMessage("Passkey registration is unavailable on this platform.")
+      return
+    }
+
+    try {
+      const credential = (await navigator.credentials.create({
+        publicKey: {
+          challenge: crypto.getRandomValues(new Uint8Array(32)),
+          rp: { name: "CredStore" },
+          user: {
+            id: crypto.getRandomValues(new Uint8Array(16)),
+            name: "credstore-admin",
+            displayName: "CredStore Admin",
+          },
+          pubKeyCredParams: [
+            { type: "public-key", alg: -7 },
+            { type: "public-key", alg: -257 },
+          ],
+          authenticatorSelection: {
+            residentKey: "preferred",
+            userVerification: "required",
+          },
+          timeout: 60000,
+          attestation: "none",
+        },
+      })) as PublicKeyCredential | null
+
+      if (!credential) throw new Error("Passkey registration was cancelled.")
+      await updateAdminAuth({
+        ...(vaultData.adminAuth || { updatedAt: new Date().toISOString() }),
+        passkeyCredentialId: bufferToBase64Url(credential.rawId),
+        failedAttempts: 0,
+        lockoutUntil: 0,
+        updatedAt: new Date().toISOString(),
+      })
+      setAdminAuthenticated(true)
+      setAdminAuthMessage("Admin passkey registered. Microsoft Authenticator or phone passkeys work when your OS/browser exposes them.")
+    } catch (error) {
+      setAdminAuthMessage(error instanceof Error ? error.message : "Passkey registration failed.")
+    }
+  }, [updateAdminAuth, vaultData.adminAuth, vaultKey, vaultRecord])
+
+  const authenticateAdminPasskey = useCallback(async () => {
+    const credentialId = vaultData.adminAuth?.passkeyCredentialId
+    if (!credentialId || typeof navigator === "undefined" || !navigator.credentials?.get) {
+      setAdminAuthMessage("No admin passkey is registered on this vault.")
+      return
+    }
+
+    try {
+      const assertion = await navigator.credentials.get({
+        publicKey: {
+          challenge: crypto.getRandomValues(new Uint8Array(32)),
+          allowCredentials: [{ id: credentialIdToBytes(credentialId), type: "public-key" }],
+          userVerification: "required",
+          timeout: 60000,
+        },
+      })
+
+      if (!assertion) throw new Error("Passkey authentication was cancelled.")
+      setAdminAuthenticated(true)
+      setAdminAuthMessage("Admin passkey accepted.")
+    } catch (error) {
+      setAdminAuthMessage(error instanceof Error ? error.message : "Passkey authentication failed.")
+    }
+  }, [vaultData.adminAuth?.passkeyCredentialId])
+
   const addProfile = useCallback(async () => {
-    if (!vaultRecord || !vaultKey || !newProfileName.trim()) return
+    if (!vaultRecord || !vaultKey || !newProfileName.trim() || !adminAuthenticated) return
 
     const currentData = normalizeVaultData(vaultData)
     const adminRole = currentData.roles?.find((role) => role.canManageProfiles) || currentData.roles?.[0]
@@ -1718,6 +2090,7 @@ export default function CredStore() {
           id: createId(),
           name: sanitizeText(newProfileName, 80).trim(),
           roleId: adminRole.id,
+          groupIds: selectedGroupId ? [selectedGroupId] : [],
           createdAt: new Date().toISOString(),
         },
       ],
@@ -1725,7 +2098,67 @@ export default function CredStore() {
 
     await persistVault(credentials, vaultRecord, vaultKey, nextVaultData)
     setNewProfileName("")
-  }, [credentials, newProfileName, persistVault, vaultData, vaultKey, vaultRecord])
+  }, [adminAuthenticated, credentials, newProfileName, persistVault, selectedGroupId, vaultData, vaultKey, vaultRecord])
+
+  const addEnterpriseGroup = useCallback(async () => {
+    if (!vaultRecord || !vaultKey || !adminAuthenticated || !newGroupName.trim()) return
+
+    const group: EnterpriseGroup = {
+      id: createId(),
+      name: sanitizeText(newGroupName, 80).trim(),
+      profileIds: [],
+      createdAt: new Date().toISOString(),
+    }
+    await persistVault(credentials, vaultRecord, vaultKey, normalizeVaultData({ ...vaultData, groups: [...(vaultData.groups || []), group] }))
+    setNewGroupName("")
+    setSelectedGroupId(group.id)
+  }, [adminAuthenticated, credentials, newGroupName, persistVault, vaultData, vaultKey, vaultRecord])
+
+  const setProfileGroupMembership = useCallback(
+    async (profileId: string, groupId: string, enabled: boolean) => {
+      if (!vaultRecord || !vaultKey || !adminAuthenticated) return
+
+      const currentData = normalizeVaultData(vaultData)
+      const groups = (currentData.groups || []).map((group) =>
+        group.id === groupId
+          ? {
+              ...group,
+              profileIds: enabled
+                ? Array.from(new Set([...group.profileIds, profileId]))
+                : group.profileIds.filter((id) => id !== profileId),
+            }
+          : group,
+      )
+      const profiles = (currentData.profiles || []).map((profile) =>
+        profile.id === profileId
+          ? {
+              ...profile,
+              groupIds: enabled
+                ? Array.from(new Set([...(profile.groupIds || []), groupId]))
+                : (profile.groupIds || []).filter((id) => id !== groupId),
+            }
+          : profile,
+      )
+      await persistVault(credentials, vaultRecord, vaultKey, normalizeVaultData({ ...currentData, groups, profiles }))
+    },
+    [adminAuthenticated, credentials, persistVault, vaultData, vaultKey, vaultRecord],
+  )
+
+  const updateCredentialAccess = useCallback(
+    async (
+      credentialId: string,
+      patch: Pick<Partial<Credential>, "ownerProfileId" | "visibleToProfileIds" | "visibleToGroupIds">,
+    ) => {
+      if (!vaultRecord || !vaultKey || !adminAuthenticated) return
+
+      const nextCredentials = credentials.map((credential) =>
+        credential.id === credentialId ? { ...credential, ...patch, updatedAt: new Date().toISOString() } : credential,
+      )
+      setCredentials(nextCredentials)
+      await persistVault(nextCredentials)
+    },
+    [adminAuthenticated, credentials, persistVault, vaultKey, vaultRecord],
+  )
 
   const toggleFieldVisibility = useCallback((fieldId: string) => {
     setVisibleFields((previous) => {
@@ -1738,6 +2171,13 @@ export default function CredStore() {
 
   const filteredCredentials = useMemo(() => {
     return credentials.filter((credential) => {
+      const visibleByEnterpriseRule =
+        adminAuthenticated ||
+        !activeProfile ||
+        !credential.ownerProfileId ||
+        credential.ownerProfileId === activeProfile.id ||
+        (credential.visibleToProfileIds || []).includes(activeProfile.id) ||
+        activeProfileGroups.some((group) => (credential.visibleToGroupIds || []).includes(group.id))
       const search = searchTerm.trim().toLowerCase()
       const matchesCategory = selectedCategory === "all" || credential.category === selectedCategory
       const matchesSearch =
@@ -1747,9 +2187,9 @@ export default function CredStore() {
           (field) => field.key.toLowerCase().includes(search) || (!field.secret && field.value.toLowerCase().includes(search)),
         )
 
-      return matchesCategory && matchesSearch
+      return visibleByEnterpriseRule && matchesCategory && matchesSearch
     })
-  }, [credentials, searchTerm, selectedCategory])
+  }, [activeProfile, activeProfileGroups, adminAuthenticated, credentials, searchTerm, selectedCategory])
 
   const selectAllFiltered = useCallback(() => {
     setSelectionMode(true)
@@ -1869,6 +2309,18 @@ export default function CredStore() {
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-1">
+            <Select value={activeProfile?.id || ""} onValueChange={setActiveProfileId}>
+              <SelectTrigger className="h-8 w-36 border-white/20 bg-white/5 text-xs text-white">
+                <SelectValue placeholder="Profile" />
+              </SelectTrigger>
+              <SelectContent className="border-gray-700 bg-gray-900/95 text-white">
+                {vaultData.profiles?.map((profile) => (
+                  <SelectItem key={profile.id} value={profile.id}>
+                    {profile.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <Dialog open={isSyncOpen} onOpenChange={setIsSyncOpen}>
               <DialogTrigger asChild>
                 <Button variant="outline" size="sm" className="border-white/20 bg-white/5 px-2 py-1 text-xs text-white hover:bg-white/10">
@@ -2200,68 +2652,9 @@ export default function CredStore() {
                           {biometricMessage && <p className="text-xs text-amber-300">{biometricMessage}</p>}
                         </section>
 
-                        <section className="space-y-3 rounded-md border border-white/10 bg-white/5 p-3">
-                          <div className="flex items-center justify-between gap-2">
-                            <Label className="text-xs">Legal & Security</Label>
-                            <Badge className="bg-white/10 text-gray-300">Offline docs</Badge>
-                          </div>
-                          <p className="text-xs text-gray-400">
-                            CredStore public code is AGPLv3-or-later. Pro and Enterprise features are governed by the
-                            commercial EULA. Vault data stays local; CredStore has no cloud vault and no master-key recovery.
-                          </p>
-                          <div className="grid gap-2 text-xs">
-                            <div className="rounded-md border border-white/10 bg-black/10 p-2">
-                              <div className="flex items-center gap-2 text-gray-200">
-                                <ShieldCheck className="h-3 w-3" />
-                                Security architecture
-                              </div>
-                              <p className="mt-1 break-all font-mono text-[11px] text-gray-400">SECURITY.md</p>
-                            </div>
-                            <div className="rounded-md border border-white/10 bg-black/10 p-2">
-                              <div className="flex items-center gap-2 text-gray-200">
-                                <Key className="h-3 w-3" />
-                                Commercial license terms
-                              </div>
-                              <p className="mt-1 break-all font-mono text-[11px] text-gray-400">LICENSE-PRO.md</p>
-                            </div>
-                            <div className="rounded-md border border-white/10 bg-black/10 p-2">
-                              <div className="flex items-center gap-2 text-gray-200">
-                                <Database className="h-3 w-3" />
-                                Privacy, terms, and pricing
-                              </div>
-                              <p className="mt-1 break-all font-mono text-[11px] text-gray-400">
-                                docs/legal/PRIVACY.md, docs/legal/TERMS.md, docs/website/PRICING.md
-                              </p>
-                            </div>
-                          </div>
-                        </section>
+                        <LegalDocsSection />
 
-                        <section className="space-y-3 rounded-md border border-white/10 bg-white/5 p-3">
-                          <div className="flex items-center justify-between gap-2">
-                            <Label className="text-xs">User Manual</Label>
-                            <Badge className="bg-white/10 text-gray-300">Offline</Badge>
-                          </div>
-                          <div className="space-y-2 text-xs text-gray-300">
-                            <p>
-                              Register: create a master password first, then add fingerprint or face unlock from Master
-                              Keys. The OS biometric screen confirms the real scan; CredStore stores only protected key
-                              material.
-                            </p>
-                            <p>
-                              Sync: choose Client to generate a one-time QR/code. On another unlocked device, choose
-                              Receiver and scan the QR or paste the PC code. Sync merges missing/newer records and does
-                              not erase receiver-only data.
-                            </p>
-                            <p>
-                              Select: long-press on Android or right-click on desktop to enter selection mode. Use Select
-                              All, Sync Selected, Delete Selected, or Clear.
-                            </p>
-                            <p>
-                              Backup: export or sync before resetting. CredStore has no server-side recovery for forgotten
-                              master keys.
-                            </p>
-                          </div>
-                        </section>
+                        <UserManualSection />
 
                         <section className="space-y-2 rounded-md border border-red-400/30 bg-red-500/10 p-3 lg:col-span-2">
                           <Label className="text-xs">Danger Zone</Label>
@@ -2362,10 +2755,70 @@ export default function CredStore() {
                           {licenseMessage && <p className="text-xs text-gray-300">{licenseMessage}</p>}
                         </section>
 
-                        <section className="space-y-2 rounded-md border border-white/10 bg-white/5 p-3">
-                          <Label className="text-xs">Employee Profiles</Label>
+                        <section className="space-y-3 rounded-md border border-white/10 bg-white/5 p-3">
+                          <div className="flex items-center justify-between gap-2">
+                            <Label className="text-xs">Admin Authentication</Label>
+                            <Badge className={adminAuthenticated ? "bg-emerald-500/20 text-emerald-200" : "bg-white/10 text-gray-300"}>
+                              {adminAuthenticated ? "Authenticated" : vaultData.adminAuth?.passwordHash ? "Locked" : "Setup"}
+                            </Badge>
+                          </div>
                           <p className="text-xs text-gray-400">
-                            Profiles are stored inside the encrypted vault. Visibility rules use the profile/role metadata foundation for enterprise ACLs.
+                            Authenticate before changing employees, project groups, or credential visibility. Passkey
+                            prompts use the local OS/browser WebAuthn stack; Microsoft Authenticator phone passkeys work
+                            when that stack exposes cross-device passkeys.
+                          </p>
+                          <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+                            <Input
+                              value={adminPassword}
+                              onChange={(event) => setAdminPassword(event.target.value)}
+                              className="border-white/20 bg-white/5 text-sm text-white"
+                              placeholder={vaultData.adminAuth?.passwordHash ? "Admin password" : "Set admin password"}
+                              type="password"
+                            />
+                            <Button
+                              type="button"
+                              onClick={authenticateEnterpriseAdmin}
+                              disabled={isAdminAuthLocked || !adminPassword}
+                              className="bg-gradient-to-r from-purple-500 to-blue-500 text-xs"
+                            >
+                              <ShieldCheck className="mr-1 h-3 w-3" />
+                              {vaultData.adminAuth?.passwordHash ? "Authenticate" : "Set Password"}
+                            </Button>
+                          </div>
+                          <div className="grid gap-2 sm:grid-cols-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={registerAdminPasskey}
+                              className="border-white/20 bg-white/5 text-xs text-white hover:bg-white/10"
+                            >
+                              <Smartphone className="mr-1 h-3 w-3" />
+                              Register Passkey
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={authenticateAdminPasskey}
+                              disabled={!vaultData.adminAuth?.passkeyCredentialId}
+                              className="border-white/20 bg-white/5 text-xs text-white hover:bg-white/10"
+                            >
+                              <Key className="mr-1 h-3 w-3" />
+                              Authenticator / Passkey
+                            </Button>
+                          </div>
+                          {isAdminAuthLocked && (
+                            <p className="text-xs text-amber-300">Locked for {Math.ceil(adminAuthLockoutRemaining / 1000)}s after failed attempts.</p>
+                          )}
+                          {adminAuthMessage && <p className="text-xs text-gray-300">{adminAuthMessage}</p>}
+                        </section>
+
+                        <section className="space-y-2 rounded-md border border-white/10 bg-white/5 p-3">
+                          <div className="flex items-center justify-between gap-2">
+                            <Label className="text-xs">Employee Profiles & Projects</Label>
+                            <Badge className="bg-white/10 text-gray-300">{vaultData.profiles?.length || 0} profiles</Badge>
+                          </div>
+                          <p className="text-xs text-gray-400">
+                            Profiles and project groups are stored inside the encrypted vault. New credentials are owned by the active profile.
                           </p>
                           <div className="space-y-2">
                             {vaultData.profiles?.map((profile) => (
@@ -2373,30 +2826,199 @@ export default function CredStore() {
                                 key={profile.id}
                                 className="flex items-center justify-between rounded-md border border-white/10 bg-white/5 px-3 py-2 text-xs"
                               >
-                                <span>{profile.name}</span>
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <User className="h-3 w-3 text-gray-300" />
+                                    <span className="truncate">{profile.name}</span>
+                                  </div>
+                                  <p className="mt-1 truncate text-[11px] text-gray-400">
+                                    {(vaultData.groups || [])
+                                      .filter((group) => group.profileIds.includes(profile.id))
+                                      .map((group) => group.name)
+                                      .join(", ") || "No project group"}
+                                  </p>
+                                </div>
                                 <Badge className="bg-white/10 text-gray-300">
                                   {vaultData.roles?.find((role) => role.id === profile.roleId)?.name || "Role"}
                                 </Badge>
                               </div>
                             ))}
                           </div>
-                          <div className="grid grid-cols-[1fr_auto] gap-2">
+                          <div className="grid gap-2 sm:grid-cols-[1fr_12rem_auto]">
                             <Input
                               value={newProfileName}
                               onChange={(event) => setNewProfileName(event.target.value)}
                               className="border-white/20 bg-white/5 text-sm text-white"
                               placeholder="Employee profile name"
                             />
+                            <Select value={selectedGroupId || "none"} onValueChange={(value) => setSelectedGroupId(value === "none" ? "" : value)}>
+                              <SelectTrigger className="border-white/20 bg-white/5 text-sm text-white">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent className="border-gray-700 bg-gray-900/95 text-white">
+                                <SelectItem value="none">No group</SelectItem>
+                                {(vaultData.groups || []).map((group) => (
+                                  <SelectItem key={group.id} value={group.id}>
+                                    {group.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
                             <Button
                               type="button"
                               onClick={addProfile}
-                              disabled={!newProfileName.trim()}
+                              disabled={!adminAuthenticated || !newProfileName.trim()}
                               className="bg-gradient-to-r from-purple-500 to-blue-500 text-xs"
                             >
                               Add
                             </Button>
                           </div>
+                          <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+                            <Input
+                              value={newGroupName}
+                              onChange={(event) => setNewGroupName(event.target.value)}
+                              className="border-white/20 bg-white/5 text-sm text-white"
+                              placeholder="Project group name"
+                            />
+                            <Button
+                              type="button"
+                              onClick={addEnterpriseGroup}
+                              disabled={!adminAuthenticated || !newGroupName.trim()}
+                              variant="outline"
+                              className="border-white/20 bg-white/5 text-xs text-white hover:bg-white/10"
+                            >
+                              <Users className="mr-1 h-3 w-3" />
+                              Create Group
+                            </Button>
+                          </div>
+                          <div className="space-y-2">
+                            {(vaultData.groups || []).map((group) => (
+                              <div key={group.id} className="rounded-md border border-white/10 bg-black/10 p-2">
+                                <div className="mb-2 flex items-center justify-between gap-2 text-xs text-gray-100">
+                                  <span>{group.name}</span>
+                                  <Badge className="bg-white/10 text-gray-300">{group.profileIds.length} employees</Badge>
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                  {(vaultData.profiles || []).map((profile) => {
+                                    const enabled = group.profileIds.includes(profile.id)
+                                    return (
+                                      <label key={profile.id} className="flex items-center gap-1 text-[11px] text-gray-300">
+                                        <input
+                                          checked={enabled}
+                                          disabled={!adminAuthenticated}
+                                          onChange={(event) => setProfileGroupMembership(profile.id, group.id, event.target.checked)}
+                                          type="checkbox"
+                                        />
+                                        {profile.name}
+                                      </label>
+                                    )
+                                  })}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
                         </section>
+
+                        <section className="space-y-3 rounded-md border border-white/10 bg-white/5 p-3 lg:col-span-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <Label className="text-xs">Hierarchical Visibility Control</Label>
+                            <Badge className="bg-white/10 text-gray-300">{activeProfile?.name || "No profile"}</Badge>
+                          </div>
+                          <p className="text-xs text-gray-400">
+                            Admin can assign each credential to an employee owner, then share visibility with specific employees or project groups.
+                          </p>
+                          {selectedVisibilityCredential ? (
+                            <div className="grid gap-3 lg:grid-cols-[1fr_1fr]">
+                              <div className="space-y-2">
+                                <Select value={selectedVisibilityCredential.id} onValueChange={setSelectedVisibilityCredentialId}>
+                                  <SelectTrigger className="border-white/20 bg-white/5 text-sm text-white">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent className="border-gray-700 bg-gray-900/95 text-white">
+                                    {credentials.map((credential) => (
+                                      <SelectItem key={credential.id} value={credential.id}>
+                                        {credential.title}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                                <Select
+                                  value={selectedVisibilityCredential.ownerProfileId || activeProfile?.id || ""}
+                                  onValueChange={(ownerProfileId) => updateCredentialAccess(selectedVisibilityCredential.id, { ownerProfileId })}
+                                  disabled={!adminAuthenticated}
+                                >
+                                  <SelectTrigger className="border-white/20 bg-white/5 text-sm text-white">
+                                    <SelectValue placeholder="Owner profile" />
+                                  </SelectTrigger>
+                                  <SelectContent className="border-gray-700 bg-gray-900/95 text-white">
+                                    {(vaultData.profiles || []).map((profile) => (
+                                      <SelectItem key={profile.id} value={profile.id}>
+                                        {profile.name}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                                <p className="text-xs text-gray-400">
+                                  Owner: {(vaultData.profiles || []).find((profile) => profile.id === selectedVisibilityCredential.ownerProfileId)?.name || "Unassigned"}
+                                </p>
+                              </div>
+                              <div className="grid gap-3 sm:grid-cols-2">
+                                <div className="space-y-2 rounded-md border border-white/10 bg-black/10 p-2">
+                                  <div className="text-xs text-gray-100">Visible employees</div>
+                                  {(vaultData.profiles || []).map((profile) => {
+                                    const enabled = (selectedVisibilityCredential.visibleToProfileIds || []).includes(profile.id)
+                                    return (
+                                      <label key={profile.id} className="flex items-center gap-2 text-xs text-gray-300">
+                                        <input
+                                          checked={enabled}
+                                          disabled={!adminAuthenticated}
+                                          onChange={(event) => {
+                                            const current = selectedVisibilityCredential.visibleToProfileIds || []
+                                            updateCredentialAccess(selectedVisibilityCredential.id, {
+                                              visibleToProfileIds: event.target.checked
+                                                ? Array.from(new Set([...current, profile.id]))
+                                                : current.filter((id) => id !== profile.id),
+                                            })
+                                          }}
+                                          type="checkbox"
+                                        />
+                                        {profile.name}
+                                      </label>
+                                    )
+                                  })}
+                                </div>
+                                <div className="space-y-2 rounded-md border border-white/10 bg-black/10 p-2">
+                                  <div className="text-xs text-gray-100">Visible project groups</div>
+                                  {(vaultData.groups || []).map((group) => {
+                                    const enabled = (selectedVisibilityCredential.visibleToGroupIds || []).includes(group.id)
+                                    return (
+                                      <label key={group.id} className="flex items-center gap-2 text-xs text-gray-300">
+                                        <input
+                                          checked={enabled}
+                                          disabled={!adminAuthenticated}
+                                          onChange={(event) => {
+                                            const current = selectedVisibilityCredential.visibleToGroupIds || []
+                                            updateCredentialAccess(selectedVisibilityCredential.id, {
+                                              visibleToGroupIds: event.target.checked
+                                                ? Array.from(new Set([...current, group.id]))
+                                                : current.filter((id) => id !== group.id),
+                                            })
+                                          }}
+                                          type="checkbox"
+                                        />
+                                        {group.name}
+                                      </label>
+                                    )
+                                  })}
+                                </div>
+                              </div>
+                            </div>
+                          ) : (
+                            <p className="text-xs text-gray-400">Add a credential before assigning visibility.</p>
+                          )}
+                        </section>
+
+                        <UserManualSection />
                       </div>
                     )}
                   </div>
@@ -2439,7 +3061,7 @@ export default function CredStore() {
                   <Button
                     onClick={() => {
                       setEditingCredentialId(null)
-                      setDraft(createDraft())
+                      setDraft({ ...createDraft(), ownerProfileId: activeProfile?.id || adminProfile?.id || "" })
                     }}
                     className="h-8 bg-gradient-to-r from-purple-500 to-blue-500 px-3 text-sm text-white hover:from-purple-600 hover:to-blue-600"
                   >
@@ -2545,6 +3167,77 @@ export default function CredStore() {
                         </SelectContent>
                       </Select>
                     </div>
+                    <div className="space-y-2 rounded-md border border-white/10 bg-black/10 p-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <Label className="text-xs">Enterprise Access</Label>
+                        <Badge className="bg-white/10 text-gray-300">{activeProfile?.name || "Profile"}</Badge>
+                      </div>
+                      <Select
+                        value={draft.ownerProfileId || activeProfile?.id || ""}
+                        onValueChange={(ownerProfileId) => setDraft((previous) => ({ ...previous, ownerProfileId }))}
+                      >
+                        <SelectTrigger className="h-8 border-white/20 bg-white/5 text-sm text-white">
+                          <SelectValue placeholder="Owner profile" />
+                        </SelectTrigger>
+                        <SelectContent className="border-gray-700 bg-gray-900/95 text-white">
+                          {(vaultData.profiles || []).map((profile) => (
+                            <SelectItem key={profile.id} value={profile.id}>
+                              {profile.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <div className="grid gap-2 text-xs sm:grid-cols-2">
+                        <div className="space-y-1">
+                          <div className="text-gray-300">Share with employees</div>
+                          {(vaultData.profiles || []).map((profile) => {
+                            const checked = (draft.visibleToProfileIds || []).includes(profile.id)
+                            return (
+                              <label key={profile.id} className="flex items-center gap-2 text-gray-300">
+                                <input
+                                  checked={checked}
+                                  onChange={(event) => {
+                                    const current = draft.visibleToProfileIds || []
+                                    setDraft((previous) => ({
+                                      ...previous,
+                                      visibleToProfileIds: event.target.checked
+                                        ? Array.from(new Set([...current, profile.id]))
+                                        : current.filter((id) => id !== profile.id),
+                                    }))
+                                  }}
+                                  type="checkbox"
+                                />
+                                {profile.name}
+                              </label>
+                            )
+                          })}
+                        </div>
+                        <div className="space-y-1">
+                          <div className="text-gray-300">Share with groups</div>
+                          {(vaultData.groups || []).map((group) => {
+                            const checked = (draft.visibleToGroupIds || []).includes(group.id)
+                            return (
+                              <label key={group.id} className="flex items-center gap-2 text-gray-300">
+                                <input
+                                  checked={checked}
+                                  onChange={(event) => {
+                                    const current = draft.visibleToGroupIds || []
+                                    setDraft((previous) => ({
+                                      ...previous,
+                                      visibleToGroupIds: event.target.checked
+                                        ? Array.from(new Set([...current, group.id]))
+                                        : current.filter((id) => id !== group.id),
+                                    }))
+                                  }}
+                                  type="checkbox"
+                                />
+                                {group.name}
+                              </label>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    </div>
                     <div className="space-y-1">
                       <Label className="text-xs">Notes</Label>
                       <Textarea
@@ -2634,6 +3327,7 @@ export default function CredStore() {
               <CredentialCard
                 key={credential.id}
                 credential={credential}
+                ownerLabel={(vaultData.profiles || []).find((profile) => profile.id === credential.ownerProfileId)?.name}
                 visibleFields={visibleFields}
                 selected={selectedCredentialIds.has(credential.id)}
                 selectionMode={selectionMode}

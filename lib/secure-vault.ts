@@ -23,6 +23,9 @@ export interface Credential {
   category: CredentialCategory
   fields: CredentialField[]
   notes?: string
+  ownerProfileId?: string
+  visibleToProfileIds?: string[]
+  visibleToGroupIds?: string[]
   createdAt: string
   updatedAt: string
 }
@@ -61,6 +64,8 @@ export interface VaultData {
   metadata?: VaultMetadata
   profiles?: EnterpriseProfile[]
   roles?: EnterpriseRole[]
+  groups?: EnterpriseGroup[]
+  adminAuth?: EnterpriseAdminAuth
 }
 
 export interface VaultMetadata {
@@ -97,9 +102,26 @@ export interface EnterpriseProfile {
   id: string
   name: string
   roleId: string
+  groupIds?: string[]
   profileKeyPublic?: JsonWebKey
   wrappedProfileKey?: EncryptedPayload
   createdAt: string
+}
+
+export interface EnterpriseGroup {
+  id: string
+  name: string
+  profileIds: string[]
+  createdAt: string
+}
+
+export interface EnterpriseAdminAuth {
+  passwordHash?: string
+  passwordSalt?: string
+  passkeyCredentialId?: string
+  failedAttempts?: number
+  lockoutUntil?: number
+  updatedAt: string
 }
 
 export interface EnterpriseRole {
@@ -115,6 +137,9 @@ export interface CredentialDraft {
   category: CredentialCategory
   fields: CredentialField[]
   notes: string
+  ownerProfileId?: string
+  visibleToProfileIds?: string[]
+  visibleToGroupIds?: string[]
 }
 
 export interface LegacyCredential {
@@ -185,6 +210,7 @@ export const createDefaultEnterpriseState = () => {
         createdAt: now,
       },
     ] satisfies EnterpriseProfile[],
+    groups: [] satisfies EnterpriseGroup[],
   }
 }
 
@@ -200,6 +226,8 @@ export const normalizeVaultData = (data: Partial<VaultData> | null | undefined):
     },
     profiles: data?.profiles?.length ? data.profiles : enterprise.profiles,
     roles: data?.roles?.length ? data.roles : enterprise.roles,
+    groups: data?.groups || enterprise.groups,
+    adminAuth: data?.adminAuth,
   }
 }
 
@@ -211,6 +239,9 @@ export const createDraft = (): CredentialDraft => ({
     { id: createId(), key: "Password", value: "", secret: true },
   ],
   notes: "",
+  ownerProfileId: "",
+  visibleToProfileIds: [],
+  visibleToGroupIds: [],
 })
 
 export const migrateLegacyCredential = (credential: LegacyCredential): Credential => {

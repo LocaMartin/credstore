@@ -1,6 +1,6 @@
 {
   "name": "credstore",
-  "version": "1.0.20",
+  "version": "1.0.21",
   "private": false,
   "description": "Secure Offline Credential Manager",
   "license": "AGPL-3.0-or-later",
@@ -16,6 +16,7 @@
     "bin/",
     "electron/",
     "out/",
+    "scripts/clean-vault.js",
     "scripts/postinstall-desktop.js",
     "scripts/security-smoke-test.mjs",
     ".res/",
@@ -24,6 +25,7 @@
     "LICENSE",
     "LICENSE-PRO.md",
     "SECURITY.md",
+    "docs/USER-MANUAL.md",
     "docs/legal/",
     "docs/website/"
   ],
@@ -42,6 +44,8 @@
     "lint": "eslint .",
     "clean": "rimraf .next out dist",
     "clean:all": "rimraf .next out dist node_modules",
+    "clean:vault": "node scripts/clean-vault.js --yes",
+    "clean:vault:dry-run": "node scripts/clean-vault.js --dry-run",
     "build:clean": "npm run clean && npm run build",
     "postinstall": "node scripts/postinstall-desktop.js",
     "test:security": "node scripts/security-smoke-test.mjs",

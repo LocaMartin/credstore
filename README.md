@@ -4,7 +4,7 @@
   <img src="./.res/text.svg" alt="CredStore">
 </div>
 
-<p align="center"><b>1.0.20</b></p>
+<p align="center"><b>1.0.21</b></p>
 
 CredStore is a strictly offline personal credential manager for desktop, web, and Android.
 
@@ -33,6 +33,16 @@ On Linux, the desktop launcher is installed automatically during package install
 If install scripts are blocked, `credstore` still launches by caching Electron in the current user's cache directory.
 Use `credstore -version` to print the installed version and `credstore -debug` to launch with debug logging and developer
 tools enabled.
+
+To remove the global npm launcher and local desktop vault data:
+
+```bash
+credstore --clean-uninstall --yes
+npm uninstall -g credstore
+```
+
+Use `credstore --clean-vault --dry-run` first to preview the desktop data paths that will be removed. On Linux, do not
+use `npm uninstall -D credstore` for a global install; `-D` only targets a local project devDependency.
 
 ### GitHub
 
