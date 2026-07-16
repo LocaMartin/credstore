@@ -2,6 +2,19 @@
 
 All notable changes to CredStore will be documented in this file.
 
+## [1.0.22] - 2026-07-16
+
+### Fixed
+
+- Tightened Android/WebView viewport handling to remove the white bottom/right band and keep app content inside the
+  visible screen.
+- Reworked the mobile header controls so profile, sync, settings, and lock actions wrap cleanly on narrow devices.
+- Reduced the mobile sync dialog footprint, made client and receiver panels visually balanced, and constrained QR/camera
+  cards so they no longer clip on Android.
+- Added safer bottom padding and internal scrolling for sync and settings dialogs so Android navigation controls do not
+  cover content.
+- Reduced mobile user-manual height and blocked horizontal scrolling in Settings and Enterprise panels.
+
 ## [1.0.21] - 2026-07-16
 
 ### Fixed

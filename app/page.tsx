@@ -95,7 +95,7 @@ import commercialLicenseMarkdown from "@/LICENSE-PRO.md"
 import privacyTermsPricingMarkdown from "@/docs/legal/PRIVACY-TERMS-PRICING.md"
 import userManualMarkdown from "@/docs/USER-MANUAL.md"
 
-const APP_VERSION = "1.0.21"
+const APP_VERSION = "1.0.22"
 const MAX_UNLOCK_DELAY_MS = 30000
 const MAX_FAILED_UNLOCKS = 10
 const FREE_SYNC_DEVICE_LIMIT = 5
@@ -174,7 +174,7 @@ const legalDocuments = [
 
 function LegalDocsSection() {
   return (
-    <section className="space-y-3 rounded-md border border-white/10 bg-white/5 p-3">
+    <section className="min-w-0 space-y-3 rounded-md border border-white/10 bg-white/5 p-3">
       <div className="flex items-center justify-between gap-2">
         <Label className="text-xs">Legal & Security</Label>
         <Badge className="bg-white/10 text-gray-300">Offline docs</Badge>
@@ -200,7 +200,7 @@ function LegalDocsSection() {
 
 function UserManualSection() {
   return (
-    <section className="space-y-3 rounded-md border border-white/10 bg-white/5 p-3 lg:col-span-2">
+    <section className="min-w-0 space-y-3 rounded-md border border-white/10 bg-white/5 p-3 lg:col-span-2">
       <div className="flex items-center justify-between gap-2">
         <Label className="text-xs">User Manual</Label>
         <Badge className="bg-white/10 text-gray-300">Offline</Badge>
@@ -233,7 +233,7 @@ function DocDropdown({
   title: string
 }) {
   return (
-    <details className="group rounded-md border border-white/10 bg-black/10 text-xs" open={defaultOpen}>
+    <details className="group min-w-0 rounded-md border border-white/10 bg-black/10 text-xs" open={defaultOpen}>
       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2 text-gray-100">
         <span className="flex min-w-0 items-center gap-2">
           {icon}
@@ -245,7 +245,13 @@ function DocDropdown({
         </span>
       </summary>
       <div className="border-t border-white/10 px-3 py-3">
-        <div className={tall ? "max-h-[320px] overflow-y-auto pr-2" : "max-h-[240px] overflow-y-auto pr-2"}>
+        <div
+          className={
+            tall
+              ? "max-h-[220px] overflow-y-auto pr-2 sm:max-h-[320px]"
+              : "max-h-[180px] overflow-y-auto pr-2 sm:max-h-[240px]"
+          }
+        >
           <MarkdownDocument content={content} />
         </div>
       </div>
@@ -2206,7 +2212,7 @@ export default function CredStore() {
   if (isLocked) {
     return (
       <main
-        className={`min-h-dvh bg-gradient-to-br ${themeClass} flex items-center justify-center p-4 md:pt-12`}
+        className={`flex h-dvh overflow-hidden bg-gradient-to-br ${themeClass} items-center justify-center p-4 md:pt-12`}
         style={{ paddingTop: "max(2.75rem, env(safe-area-inset-top))", paddingBottom: "max(1rem, env(safe-area-inset-bottom))" }}
       >
         <DesktopWindowChrome />
@@ -2292,13 +2298,13 @@ export default function CredStore() {
 
   return (
     <main
-      className={`min-h-dvh bg-gradient-to-br ${themeClass} md:pt-8`}
+      className={`h-dvh overflow-hidden bg-gradient-to-br ${themeClass} md:pt-8`}
       style={{ paddingTop: "max(2.5rem, env(safe-area-inset-top))", paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
     >
       <DesktopWindowChrome />
       <BiometricCeremony state={biometricUi} />
-      <div className="mx-auto max-w-4xl space-y-4 px-3 pb-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="mx-auto flex h-full max-w-4xl flex-col gap-4 overflow-hidden px-3 pb-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0 flex items-center gap-2">
             <LogoMark className="h-8 w-8" />
             <div className="min-w-0">
@@ -2308,9 +2314,9 @@ export default function CredStore() {
               </p>
             </div>
           </div>
-          <div className="flex shrink-0 items-center gap-1">
+          <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:shrink-0 sm:items-center sm:gap-1">
             <Select value={activeProfile?.id || ""} onValueChange={setActiveProfileId}>
-              <SelectTrigger className="h-8 w-36 border-white/20 bg-white/5 text-xs text-white">
+              <SelectTrigger className="h-9 w-full border-white/20 bg-white/5 text-xs text-white sm:h-8 sm:w-36">
                 <SelectValue placeholder="Profile" />
               </SelectTrigger>
               <SelectContent className="border-gray-700 bg-gray-900/95 text-white">
@@ -2323,19 +2329,24 @@ export default function CredStore() {
             </Select>
             <Dialog open={isSyncOpen} onOpenChange={setIsSyncOpen}>
               <DialogTrigger asChild>
-                <Button variant="outline" size="sm" className="border-white/20 bg-white/5 px-2 py-1 text-xs text-white hover:bg-white/10">
+                <Button variant="outline" size="sm" className="h-9 w-full border-white/20 bg-white/5 px-2 py-1 text-xs text-white hover:bg-white/10 sm:h-8 sm:w-auto">
                   <Wifi className="mr-1 h-3 w-3" />
                   Sync
                 </Button>
               </DialogTrigger>
-              <DialogContent className="w-[calc(100vw-1rem)] max-w-md border-gray-700 bg-gray-900/95 text-white">
-                <DialogHeader>
+              <DialogContent
+                className={
+                  "grid max-h-[calc(100dvh-4.75rem)] w-[calc(100vw-1rem)] max-w-[26rem] " +
+                  "grid-rows-[auto_minmax(0,1fr)] gap-0 overflow-hidden border-gray-700 bg-gray-900/95 p-0 text-white"
+                }
+              >
+                <DialogHeader className="border-b border-white/10 px-4 pb-3 pt-4">
                   <DialogTitle className="text-sm">Local Device Sync</DialogTitle>
                   <DialogDescription className="text-xs text-gray-400">
                     Sync encrypted vault data locally with QR. No internet connection is used.
                   </DialogDescription>
                 </DialogHeader>
-                <div className="space-y-3">
+                <div className="min-h-0 space-y-3 overflow-y-auto overscroll-contain px-4 pb-16 pt-3 sm:pb-4">
                   <div className="grid grid-cols-2 gap-2">
                     <Button
                       type="button"
@@ -2372,33 +2383,45 @@ export default function CredStore() {
                   </div>
                   {syncMode === "client" ? (
                     <div className="space-y-3">
-                      <div className="rounded-lg border border-white/15 bg-gradient-to-br from-white to-slate-100 p-3 text-center text-slate-950 shadow-xl shadow-black/30">
-                        <div className="mb-2 flex items-center justify-center gap-2 text-xs font-semibold text-slate-700">
-                          <LogoMark className="h-5 w-5" />
-                          CredStore One-Time Sync
-                        </div>
-                        {syncPayload ? (
+                        <div className="rounded-lg border border-white/15 bg-gradient-to-br from-white to-slate-100 p-3 text-center text-slate-950 shadow-xl shadow-black/30">
+                          <div className="mb-2 flex items-center justify-center gap-2 text-xs font-semibold text-slate-700">
+                            <LogoMark className="h-5 w-5" />
+                            CredStore One-Time Sync
+                          </div>
+                          {syncPayload ? (
                           <QrRenderBoundary
                             key={syncPayload}
                             onError={() => setSyncMessage("QR generation failed. Generate a new one-time QR.")}
                           >
-                            <div className="inline-grid rounded-lg border border-slate-200 bg-white p-3 shadow-inner">
+                            <div
+                              className={
+                                "mx-auto grid aspect-square w-full max-w-[244px] place-items-center rounded-lg " +
+                                "border border-slate-200 bg-white p-2 shadow-inner sm:max-w-[300px]"
+                              }
+                            >
                               <QRCodeCanvas
                                 value={syncPayload}
-                                size={292}
+                                size={224}
                                 level="L"
                                 includeMargin
                                 imageSettings={{
                                   src: RUNTIME_LOGO_PATH,
-                                  height: 34,
-                                  width: 34,
+                                  height: 28,
+                                  width: 28,
                                   excavate: true,
                                 }}
                               />
                             </div>
                           </QrRenderBoundary>
                         ) : (
-                          <QrCode className="mx-auto h-24 w-24 text-gray-500" />
+                          <div
+                            className={
+                              "mx-auto grid aspect-square w-full max-w-[244px] place-items-center rounded-lg " +
+                              "border border-slate-200 bg-white p-2 shadow-inner sm:max-w-[300px]"
+                            }
+                          >
+                            <QrCode className="h-24 w-24 text-gray-500" />
+                          </div>
                         )}
                         <p className="mt-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
                           {syncCode || "One-time"}
@@ -2443,15 +2466,18 @@ export default function CredStore() {
                     </div>
                   ) : (
                     <div className="space-y-3">
-                      <div className="rounded-lg border border-white/15 bg-gradient-to-br from-white to-slate-100 p-3 text-center text-slate-950 shadow-xl shadow-black/30">
-                        <div className="mb-2 flex items-center justify-center gap-2 text-xs font-semibold text-slate-700">
-                          <LogoMark className="h-5 w-5" />
-                          CredStore Receiver
-                        </div>
-                        <video
-                          ref={scanVideoRef}
-                          className="aspect-square w-full rounded-lg border border-slate-200 bg-black object-cover shadow-inner"
-                          muted
+                        <div className="rounded-lg border border-white/15 bg-gradient-to-br from-white to-slate-100 p-3 text-center text-slate-950 shadow-xl shadow-black/30">
+                          <div className="mb-2 flex items-center justify-center gap-2 text-xs font-semibold text-slate-700">
+                            <LogoMark className="h-5 w-5" />
+                            CredStore Receiver
+                          </div>
+                          <video
+                            ref={scanVideoRef}
+                            className={
+                              "mx-auto aspect-[4/3] w-full max-w-[244px] rounded-lg border border-slate-200 " +
+                              "bg-black object-cover shadow-inner sm:aspect-square sm:max-w-[300px]"
+                            }
+                            muted
                           playsInline
                         />
                         <p className="mt-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
@@ -2501,7 +2527,7 @@ export default function CredStore() {
             </Dialog>
             <Dialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen}>
               <DialogTrigger asChild>
-                <Button variant="outline" size="sm" className="border-white/20 bg-white/5 px-2 py-1 text-xs text-white hover:bg-white/10">
+                <Button variant="outline" size="sm" className="h-9 w-full border-white/20 bg-white/5 px-2 py-1 text-xs text-white hover:bg-white/10 sm:h-8 sm:w-auto">
                   <Settings className="mr-1 h-3 w-3" />
                   Settings
                 </Button>
@@ -2520,7 +2546,12 @@ export default function CredStore() {
                     </DialogDescription>
                   </div>
                 </DialogHeader>
-                <div className="grid h-[calc(100dvh-7rem)] grid-rows-[auto_minmax(0,1fr)] gap-4 p-4 sm:h-auto sm:max-h-[calc(100dvh-9rem)] sm:p-5">
+                <div
+                  className={
+                    "grid h-[calc(100dvh-9.25rem)] min-w-0 grid-rows-[auto_minmax(0,1fr)] gap-4 " +
+                    "overflow-hidden p-4 sm:h-auto sm:max-h-[calc(100dvh-9rem)] sm:p-5"
+                  }
+                >
                   <div className="grid grid-cols-2 gap-2 rounded-md border border-white/10 bg-black/10 p-1">
                     <Button
                       type="button"
@@ -2548,10 +2579,13 @@ export default function CredStore() {
                     </Button>
                   </div>
 
-                  <div className="min-h-0 overflow-y-auto overscroll-contain">
+                  <div
+                    key={settingsPanel}
+                    className="min-h-0 min-w-0 overflow-y-auto overflow-x-hidden overscroll-contain pb-16 sm:pb-0"
+                  >
                     {settingsPanel === "settings" ? (
-                      <div className="grid gap-4 lg:grid-cols-2">
-                        <section className="space-y-2 rounded-md border border-white/10 bg-white/5 p-3">
+                      <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+                        <section className="min-w-0 space-y-2 rounded-md border border-white/10 bg-white/5 p-3">
                           <Label className="text-xs">Theme</Label>
                           <Select value={theme} onValueChange={(value) => changeTheme(value as ThemeName)}>
                             <SelectTrigger className="border-white/20 bg-white/5 text-white">
@@ -2566,19 +2600,19 @@ export default function CredStore() {
                           </Select>
                         </section>
 
-                        <section className="space-y-2 rounded-md border border-white/10 bg-white/5 p-3 lg:row-span-2">
+                        <section className="min-w-0 space-y-2 rounded-md border border-white/10 bg-white/5 p-3 lg:row-span-2">
                           <Label className="text-xs">Master Keys</Label>
                           <div className="space-y-2">
                             {vaultRecord?.keySlots.map((slot) => (
                               <div
                                 key={slot.id}
-                                className="flex items-center justify-between rounded-md border border-white/10 bg-white/5 px-3 py-2 text-xs"
+                                className="flex min-w-0 items-center justify-between gap-2 rounded-md border border-white/10 bg-white/5 px-3 py-2 text-xs"
                               >
-                                <div className="flex items-center gap-2">
+                                <div className="flex min-w-0 items-center gap-2">
                                   {slot.type === "password" && <Key className="h-3 w-3" />}
                                   {slot.type === "fingerprint" && <Fingerprint className="h-3 w-3" />}
                                   {slot.type === "face" && <ScanFace className="h-3 w-3" />}
-                                  <span>{slot.label}</span>
+                                  <span className="truncate">{slot.label}</span>
                                   {!slot.enabled && <Badge className="bg-white/10 text-gray-300">native plugin needed</Badge>}
                                 </div>
                                 <Button
@@ -2662,8 +2696,8 @@ export default function CredStore() {
                         </section>
                       </div>
                     ) : (
-                      <div className="grid gap-4 lg:grid-cols-2">
-                        <section className="space-y-2 rounded-md border border-white/10 bg-white/5 p-3">
+                      <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+                        <section className="min-w-0 space-y-2 rounded-md border border-white/10 bg-white/5 p-3">
                           <div className="flex items-center justify-between gap-2">
                             <Label className="text-xs">Enterprise License</Label>
                             <Badge className="bg-white/10 text-gray-200">
@@ -2704,7 +2738,7 @@ export default function CredStore() {
                           />
                           <video
                             ref={licenseScanVideoRef}
-                            className="aspect-video w-full rounded-md border border-white/10 bg-black object-cover"
+                            className="aspect-[4/3] w-full rounded-md border border-white/10 bg-black object-cover sm:aspect-video"
                             muted
                             playsInline
                           />
@@ -2755,7 +2789,7 @@ export default function CredStore() {
                           {licenseMessage && <p className="text-xs text-gray-300">{licenseMessage}</p>}
                         </section>
 
-                        <section className="space-y-3 rounded-md border border-white/10 bg-white/5 p-3">
+                        <section className="min-w-0 space-y-3 rounded-md border border-white/10 bg-white/5 p-3">
                           <div className="flex items-center justify-between gap-2">
                             <Label className="text-xs">Admin Authentication</Label>
                             <Badge className={adminAuthenticated ? "bg-emerald-500/20 text-emerald-200" : "bg-white/10 text-gray-300"}>
@@ -2812,7 +2846,7 @@ export default function CredStore() {
                           {adminAuthMessage && <p className="text-xs text-gray-300">{adminAuthMessage}</p>}
                         </section>
 
-                        <section className="space-y-2 rounded-md border border-white/10 bg-white/5 p-3">
+                        <section className="min-w-0 space-y-2 rounded-md border border-white/10 bg-white/5 p-3">
                           <div className="flex items-center justify-between gap-2">
                             <Label className="text-xs">Employee Profiles & Projects</Label>
                             <Badge className="bg-white/10 text-gray-300">{vaultData.profiles?.length || 0} profiles</Badge>
@@ -2919,7 +2953,7 @@ export default function CredStore() {
                           </div>
                         </section>
 
-                        <section className="space-y-3 rounded-md border border-white/10 bg-white/5 p-3 lg:col-span-2">
+                        <section className="min-w-0 space-y-3 rounded-md border border-white/10 bg-white/5 p-3 lg:col-span-2">
                           <div className="flex items-center justify-between gap-2">
                             <Label className="text-xs">Hierarchical Visibility Control</Label>
                             <Badge className="bg-white/10 text-gray-300">{activeProfile?.name || "No profile"}</Badge>
@@ -2928,7 +2962,7 @@ export default function CredStore() {
                             Admin can assign each credential to an employee owner, then share visibility with specific employees or project groups.
                           </p>
                           {selectedVisibilityCredential ? (
-                            <div className="grid gap-3 lg:grid-cols-[1fr_1fr]">
+                            <div className="grid min-w-0 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
                               <div className="space-y-2">
                                 <Select value={selectedVisibilityCredential.id} onValueChange={setSelectedVisibilityCredentialId}>
                                   <SelectTrigger className="border-white/20 bg-white/5 text-sm text-white">
@@ -3025,7 +3059,12 @@ export default function CredStore() {
                 </div>
               </DialogContent>
             </Dialog>
-            <Button onClick={lockVault} variant="outline" size="sm" className="border-white/20 bg-white/5 px-2 py-1 text-xs text-white hover:bg-white/10">
+            <Button
+              onClick={lockVault}
+              variant="outline"
+              size="sm"
+              className="h-9 w-full border-white/20 bg-white/5 px-2 py-1 text-xs text-white hover:bg-white/10 sm:h-8 sm:w-auto"
+            >
               <LogOut className="mr-1 h-3 w-3" />
               Lock
             </Button>
@@ -3099,9 +3138,9 @@ export default function CredStore() {
                       <Label className="text-xs">Fields</Label>
                       <div className="space-y-2">
                         {draft.fields.map((field) => (
-                          <div
+          <div
                             key={field.id}
-                            className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-1"
+                            className="grid grid-cols-1 gap-1 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]"
                           >
                             <Input
                               value={field.key}
@@ -3109,7 +3148,7 @@ export default function CredStore() {
                               className="h-8 border-white/20 bg-white/5 text-sm text-white"
                               placeholder="Key"
                             />
-                            <div className="flex gap-1">
+                            <div className="flex min-w-0 gap-1">
                               <Input
                                 value={field.value}
                                 onChange={(event) => updateDraftField(field.id, { value: event.target.value })}
@@ -3128,7 +3167,7 @@ export default function CredStore() {
                                 </Button>
                               )}
                             </div>
-                            <div className="flex gap-1">
+                            <div className="flex gap-1 sm:justify-end">
                               <Button
                                 type="button"
                                 variant="outline"
@@ -3313,7 +3352,7 @@ export default function CredStore() {
           </Card>
         )}
 
-        <div className="max-h-[calc(100dvh-150px)] space-y-2 overflow-y-auto">
+        <div className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain pb-3">
           {filteredCredentials.length === 0 ? (
             <Card className="border-white/10 bg-white/5 shadow-sm">
               <CardContent className="p-6 text-center">

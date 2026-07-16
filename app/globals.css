@@ -54,9 +54,24 @@
     border-color: hsl(var(--border));
   }
   body {
-    background-color: hsl(var(--background));
+    background-color: #020617;
     color: hsl(var(--foreground));
     font-feature-settings: "rlig" 1, "calt" 1;
+    min-height: 100%;
+    overflow: hidden;
+  }
+
+  html {
+    min-height: 100%;
+    background: #020617;
+    overflow: hidden;
+  }
+
+  @supports (height: 100dvh) {
+    html,
+    body {
+      height: 100dvh;
+    }
   }
 }
 
