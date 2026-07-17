@@ -22,6 +22,8 @@
           <div class="top-actions">
             <a href="/credstore/">Home</a>
             <a href="/credstore/web/key/">License Key</a>
+            <a href="/credstore/web/hof/">Hall of Fame</a>
+            <a href="/credstore/web/advisory/">Advisories</a>
             <a href="/credstore/web/fnc/">Feedback</a>
           </div>
         </nav>
@@ -58,8 +60,20 @@
               </select>
             </label>
             <label>
+              CVSS score
+              <input name="cvssScore" maxlength="12" placeholder="9.8" />
+            </label>
+            <label>
               Bug title
               <input name="title" required maxlength="180" />
+            </label>
+            <label>
+              Affected version
+              <input name="affectedVersion" maxlength="120" placeholder="v1.0.0 - v1.0.23" />
+            </label>
+            <label>
+              Public profile (optional)
+              <input name="profileUrl" type="url" maxlength="240" placeholder="GitHub, LinkedIn, Instagram, or personal site" />
             </label>
             <label>
               Details
@@ -67,8 +81,8 @@
             </label>
             <label>
               Screenshot / proof image
-              <input name="screenshot" type="file" accept="image/png,image/jpeg,image/webp" />
-              <span class="small muted">PNG, JPEG, or WebP. Keep it under 1 MB.</span>
+              <input name="screenshot" type="file" accept="image/png,image/jpeg" />
+              <span class="small muted">PNG or JPG only. Keep it under 1 MB.</span>
             </label>
             <button type="submit">Submit Report</button>
             <p id="bug-status" class="muted"></p>
@@ -81,8 +95,22 @@
             Do not access third-party data, publish active exploit details before remediation, or attack infrastructure
             outside CredStore-owned surfaces. Good-faith reports are reviewed through the internal ticketing system.
           </p>
-          <h2>Hall of Fame</h2>
-          <div id="hall-public" class="list empty">No public entries yet.</div>
+          <h3>In-scope targets</h3>
+          <ul class="rule-list">
+            <li>CredStore desktop app for Linux, Windows, and macOS.</li>
+            <li>CredStore Android APK and iOS app builds.</li>
+            <li>CredStore website and static endpoints under <code>https://locamartin.github.io/credstore/*</code>.</li>
+          </ul>
+          <h3>Out-of-scope activity</h3>
+          <ul class="rule-list">
+            <li>Denial-of-service, spam, social engineering, physical attacks, or third-party service abuse.</li>
+            <li>Accessing, copying, modifying, or deleting data that does not belong to your own test account/device.</li>
+            <li>Public disclosure before CredStore has validated and remediated the issue.</li>
+          </ul>
+          <p class="muted small">
+            Public recognition is published on the dedicated
+            <a href="/credstore/web/hof/">Hall of Fame</a> and advisory pages after validation.
+          </p>
         </article>
       </section>
 

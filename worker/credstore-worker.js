@@ -109,9 +109,13 @@ async function storePublicRecord(request, env, type) {
     company: sanitizeText(input.company || "", 120),
     title: sanitizeText(input.title || "", 180),
     severity: sanitizeText(input.severity || "", 32),
+    cvssScore: sanitizeText(input.cvssScore || "", 12),
+    affectedVersion: sanitizeText(input.affectedVersion || "", 120),
+    profileUrl: sanitizeUrl(input.profileUrl || ""),
+    remediation: sanitizeText(input.remediation || "", 1200),
     transactionId: sanitizeText(input.transactionId || "", 180),
     message: sanitizeText(input.message || "", 6000),
-    screenshot: sanitizeDataUrl(input.screenshot || ""),
+    screenshot: sanitizeDataUrl(input.screenshot || "", { allowWebp: type !== "bug" }),
     response: "",
     chat: [],
   };
@@ -223,6 +227,10 @@ async function handleHallWrite(request, env) {
     name: sanitizeText(input.name, 120),
     title: sanitizeText(input.title, 180),
     severity: sanitizeText(input.severity, 32),
+    cvssScore: sanitizeText(input.cvssScore || "", 12),
+    affectedVersion: sanitizeText(input.affectedVersion || "", 120),
+    profileUrl: sanitizeUrl(input.profileUrl || ""),
+    remediation: sanitizeText(input.remediation || "", 1200),
     message: sanitizeText(input.message || "", 1200),
     public: true,
   };
@@ -348,16 +356,66 @@ function sanitizeEmail(value) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : "";
 }
 
+function sanitizeUrl(value) {
+  const url = sanitizeText(value, 240);
+  if (!url) return "";
+  try {
+    const parsed = new URL(url);
+    return ["https:", "http:"].includes(parsed.protocol) ? parsed.toString() : "";
+  } catch {
+    return "";
+  }
+}
+
 function sanitizeChoice(value, allowed, fallback) {
   return allowed.includes(value) ? value : fallback;
 }
 
-function sanitizeDataUrl(value) {
+function sanitizeDataUrl(value, options = {}) {
   const dataUrl = String(value || "");
   if (!dataUrl) return "";
   if (dataUrl.length > maxJsonBytes) throw new PublicError("Screenshot is too large.", 413);
-  if (!/^data:image\/(png|jpeg|webp);base64,[a-z0-9+/=]+$/i.test(dataUrl)) {
-    throw new PublicError("Screenshot must be a PNG, JPEG, or WebP image.", 400);
+  const allowed = options.allowWebp === false ? "png|jpeg" : "png|jpeg|webp";
+  const match = dataUrl.match(new RegExp(`^data:image\\/(${allowed});base64,([a-z0-9+/=]+)$`, "i"));
+  if (!match) {
+    throw new PublicError(
+      options.allowWebp === false
+        ? "Screenshot must be a PNG or JPEG image."
+        : "Screenshot must be a PNG, JPEG, or WebP image.",
+      400,
+    );
+  }
+  const mime = match[1].toLowerCase();
+  let bytes;
+  try {
+    bytes = Uint8Array.from(atob(match[2].slice(0, 32)), (char) => char.charCodeAt(0));
+  } catch {
+    throw new PublicError("Screenshot is not valid base64 image data.", 400);
+  }
+  const isPng =
+    mime === "png" &&
+    bytes[0] === 0x89 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x4e &&
+    bytes[3] === 0x47 &&
+    bytes[4] === 0x0d &&
+    bytes[5] === 0x0a &&
+    bytes[6] === 0x1a &&
+    bytes[7] === 0x0a;
+  const isJpeg = mime === "jpeg" && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+  const isWebp =
+    options.allowWebp !== false &&
+    mime === "webp" &&
+    bytes[0] === 0x52 &&
+    bytes[1] === 0x49 &&
+    bytes[2] === 0x46 &&
+    bytes[3] === 0x46 &&
+    bytes[8] === 0x57 &&
+    bytes[9] === 0x45 &&
+    bytes[10] === 0x42 &&
+    bytes[11] === 0x50;
+  if (!isPng && !isJpeg && !isWebp) {
+    throw new PublicError("Screenshot file signature does not match the declared image type.", 400);
   }
   return dataUrl;
 }

@@ -100,6 +100,12 @@ main {
   text-decoration: none;
 }
 
+.top-actions a:hover,
+.panel a,
+.record a {
+  color: #c4b5fd;
+}
+
 .brand {
   display: flex;
   align-items: center;
@@ -563,10 +569,21 @@ pre {
 .EasyMDEContainer .CodeMirror {
   border-radius: 6px;
   caret-color: white;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.EasyMDEContainer .CodeMirror pre.CodeMirror-line,
+.EasyMDEContainer .CodeMirror pre.CodeMirror-line-like {
+  line-height: 1.55;
 }
 
 .EasyMDEContainer .CodeMirror-cursor {
   border-left-color: white;
+  border-left-width: 1px;
+  height: 1.45em !important;
+  max-height: 22px !important;
 }
 
 .EasyMDEContainer .CodeMirror-selected {
@@ -598,6 +615,34 @@ pre {
   max-height: 420px;
   overflow: auto;
   gap: 10px;
+}
+
+.rule-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-left: 20px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.record-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.record-meta span {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 4px 9px;
+  color: #dbeafe;
+  font-size: 12px;
+}
+
+.advisory-list .record strong {
+  color: #f6c85f;
 }
 
 .chat-thread.empty {

@@ -149,8 +149,28 @@
               </select>
             </label>
             <label>
+              CVSS score
+              <input name="cvssScore" maxlength="12" placeholder="9.8" />
+            </label>
+            <label>
+              Affected version
+              <input name="affectedVersion" maxlength="120" placeholder="v1.0.0 - v1.0.23" />
+            </label>
+            <label>
               Recognition
               <input name="title" required maxlength="180" />
+            </label>
+            <label>
+              Hacker profile (optional)
+              <input name="profileUrl" type="url" maxlength="240" placeholder="GitHub, LinkedIn, Instagram, or personal site" />
+            </label>
+            <label>
+              Bug description
+              <textarea name="message" data-markdown-editor maxlength="1200" placeholder="Public advisory bug description."></textarea>
+            </label>
+            <label>
+              Fix / remediation
+              <textarea name="remediation" data-markdown-editor maxlength="1200" placeholder="What was changed to fix the bug."></textarea>
             </label>
             <button type="submit">Publish Entry</button>
             <p id="hall-status" class="muted"></p>

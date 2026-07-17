@@ -39,6 +39,14 @@ async function readFileAsDataUrl(file) {
   });
 }
 
+async function readProofImageAsDataUrl(file) {
+  if (!file) return "";
+  if (!["image/png", "image/jpeg"].includes(file.type)) {
+    throw new Error("Proof image must be PNG or JPG only.");
+  }
+  return await readFileAsDataUrl(file);
+}
+
 function readAttachmentAsDataUrl(file) {
   return readFileAsDataUrl(file);
 }
@@ -75,6 +83,66 @@ function renderList(elementId, items, kind) {
         <small>Chat messages: ${(item.chat || []).length}</small>
         <small>ID: ${escapeHtml(item.id || "")}</small>
         <small>Status: ${escapeHtml(item.status || "new")} ${kind ? `- ${kind}` : ""} ${escapeHtml(item.createdAt || "")}</small>
+      </article>`;
+    })
+    .join("");
+}
+
+function renderHallEntries(elementId, items) {
+  const element = document.getElementById(elementId);
+  if (!element) return;
+  if (!items.length) {
+    element.className = "list empty";
+    element.textContent = "No public entries yet.";
+    return;
+  }
+  element.className = "list";
+  element.innerHTML = items
+    .map((item) => {
+      const profile = item.profileUrl
+        ? `<a href="${escapeHtml(item.profileUrl)}" target="_blank" rel="noreferrer">Researcher profile</a>`
+        : "";
+      return `<article class="record">
+        <strong>${escapeHtml(item.name || item.hunterName || "Security Researcher")}</strong>
+        <div class="record-meta">
+          <span>${escapeHtml(item.severity || "Informational")}</span>
+          ${item.cvssScore ? `<span>CVSS ${escapeHtml(item.cvssScore)}</span>` : ""}
+          ${item.affectedVersion ? `<span>${escapeHtml(item.affectedVersion)}</span>` : ""}
+        </div>
+        <p>${escapeHtml(item.title || "Accepted CredStore security report")}</p>
+        ${profile}
+        <small>ID: ${escapeHtml(item.id || "")}</small>
+      </article>`;
+    })
+    .join("");
+}
+
+function renderAdvisories(elementId, items) {
+  const element = document.getElementById(elementId);
+  if (!element) return;
+  const advisories = items.filter((item) => item.advisory !== false);
+  if (!advisories.length) {
+    element.className = "list empty";
+    element.textContent = "No public advisories yet.";
+    return;
+  }
+  element.className = "list advisory-list";
+  element.innerHTML = advisories
+    .map((item) => {
+      const reporter = item.profileUrl
+        ? `<a href="${escapeHtml(item.profileUrl)}" target="_blank" rel="noreferrer">${escapeHtml(item.name || "Reporter")}</a>`
+        : escapeHtml(item.name || "Security Researcher");
+      return `<article class="record">
+        <strong>${escapeHtml(item.title || "CredStore Security Advisory")}</strong>
+        <div class="record-meta">
+          <span>${escapeHtml(item.severity || "Informational")}</span>
+          ${item.cvssScore ? `<span>CVSS ${escapeHtml(item.cvssScore)}</span>` : ""}
+          ${item.affectedVersion ? `<span>Affected: ${escapeHtml(item.affectedVersion)}</span>` : ""}
+        </div>
+        <p><strong>Reporter:</strong> ${reporter}</p>
+        <p><strong>Description:</strong> ${escapeHtml(item.message || "Validated vulnerability report.")}</p>
+        <p><strong>Remediation:</strong> ${escapeHtml(item.remediation || "Remediation completed in a patched CredStore release.")}</p>
+        <small>Advisory ID: ${escapeHtml(item.id || "")}</small>
       </article>`;
     })
     .join("");
@@ -440,13 +508,17 @@ async function generateCertificatePdf(values) {
 // Hall of fame
 
 async function loadPublicHall() {
+  const hall = document.getElementById("hall-public");
+  const advisory = document.getElementById("advisory-public");
+  if (!hall && !advisory) return;
   try {
     const response = await fetch(`${workerBase}/hall-of-fame`);
     const data = await response.json();
-    renderList("hall-public", data.items || [], "public");
+    renderHallEntries("hall-public", data.items || []);
+    renderAdvisories("advisory-public", data.items || []);
   } catch {
-    const hall = document.getElementById("hall-public");
     if (hall) hall.textContent = "Hall of fame is unavailable.";
+    if (advisory) advisory.textContent = "Security advisories are unavailable.";
   }
 }
 
@@ -567,7 +639,7 @@ function initVdpPage() {
     if (status) status.textContent = "Submitting report...";
     try {
       const values = formData(form);
-      values.screenshot = await readFileAsDataUrl(form.screenshot?.files?.[0]);
+      values.screenshot = await readProofImageAsDataUrl(form.screenshot?.files?.[0]);
       const data = await postJson("/bugs", values);
       if (status) status.textContent = `Report submitted. Ticket: ${data.id}. Save this ID for follow-up.`;
       localStorage.setItem("credstore_last_ticket_id", data.id || "");
@@ -684,6 +756,8 @@ function initAdminPage() {
       await postJson("/admin/hall-of-fame", formData(event.currentTarget), authHeaders());
       if (status) status.textContent = "Hall of fame entry published.";
       event.currentTarget.reset();
+      markdownEditors.get(event.currentTarget.message)?.value("");
+      markdownEditors.get(event.currentTarget.remediation)?.value("");
       await loadAdmin();
     } catch (error) {
       if (status) status.textContent = error instanceof Error ? error.message : "Publish failed.";
