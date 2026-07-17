@@ -93,8 +93,9 @@ import securityMarkdown from "@/SECURITY.md"
 import commercialLicenseMarkdown from "@/LICENSE-PRO.md"
 import privacyTermsPricingMarkdown from "@/docs/legal/PRIVACY-TERMS-PRICING.md"
 import userManualMarkdown from "@/docs/USER-MANUAL.md"
+import adminManualMarkdown from "@/docs/ADMIN-MANUAL.md"
 
-const APP_VERSION = "1.0.23"
+const APP_VERSION = "1.1.24"
 const MAX_UNLOCK_DELAY_MS = 30000
 const MAX_FAILED_UNLOCKS = 10
 const FREE_SYNC_DEVICE_LIMIT = 5
@@ -107,6 +108,12 @@ const SYNC_QR_PREFIX = "cs1."
 const SYNC_PAIRING_PREFIX = "csp1."
 const ADMIN_AUTH_LOCKOUT_MS = 30000
 const MAX_ADMIN_AUTH_FAILURES = 5
+const NO_IME_LEARNING_PROPS = {
+  autoCapitalize: "none",
+  autoComplete: "off",
+  autoCorrect: "off",
+  spellCheck: false,
+} as const
 
 ed25519Hashes.sha512Async = async (message) =>
   new Uint8Array(await crypto.subtle.digest("SHA-512", new Uint8Array(message).buffer))
@@ -253,18 +260,36 @@ function UserManualSection() {
   )
 }
 
+function AdminManualSection() {
+  return (
+    <section className="min-w-0 space-y-3 rounded-md border border-white/10 bg-white/5 p-3 lg:col-span-2">
+      <div className="flex items-center justify-between gap-2">
+        <Label className="text-xs">Admin Manual</Label>
+        <Badge className="bg-white/10 text-gray-300">Enterprise</Badge>
+      </div>
+      <DocDropdown
+        content={adminManualMarkdown}
+        icon={<ShieldCheck className="h-3 w-3" />}
+        source="docs/ADMIN-MANUAL.md"
+        title="Admin Manual"
+        defaultOpen
+        tall
+      />
+    </section>
+  )
+}
+
 function DocDropdown({
   content,
   defaultOpen = false,
   icon,
-  source,
   tall = false,
   title,
 }: {
   content: string
   defaultOpen?: boolean
   icon: ReactNode
-  source: string
+  source?: string
   tall?: boolean
   title: string
 }) {
@@ -276,7 +301,6 @@ function DocDropdown({
           <span className="truncate">{title}</span>
         </span>
         <span className="flex shrink-0 items-center gap-2 text-[11px] text-gray-400">
-          <span className="hidden font-mono sm:inline">{source}</span>
           <ChevronDown className="h-3 w-3 transition-transform group-open:rotate-180" />
         </span>
       </summary>
@@ -360,8 +384,15 @@ type BiometricUiState = {
 }
 
 type SyncDoneState = {
+  status: "success" | "error"
+  title: string
+  message: string
   deviceName: string
   deviceId: string
+  added: number
+  updated: number
+  unchanged: number
+  total: number
 } | null
 
 type SettingsPanel = "settings" | "enterprise"
@@ -713,6 +744,26 @@ function mergeVaultData(current: VaultData, incoming: VaultData): VaultData {
     profiles: mergeById(currentNormalized.profiles || [], incomingNormalized.profiles || []),
     roles: mergeById(currentNormalized.roles || [], incomingNormalized.roles || []),
   })
+}
+
+function summarizeCredentialMerge(current: Credential[] = [], incoming: Credential[] = []) {
+  const currentById = new Map(current.map((credential) => [credential.id, credential]))
+  let added = 0
+  let updated = 0
+  let unchanged = 0
+
+  for (const incomingCredential of incoming) {
+    const currentCredential = currentById.get(incomingCredential.id)
+    if (!currentCredential) {
+      added += 1
+      continue
+    }
+
+    if ((incomingCredential.updatedAt || "") > (currentCredential.updatedAt || "")) updated += 1
+    else unchanged += 1
+  }
+
+  return { added, updated, unchanged, total: incoming.length }
 }
 
 async function assertMonotonicLicenseClock() {
@@ -1244,6 +1295,7 @@ function DesktopWindowChrome() {
 
 function BiometricCeremony({ state }: { state: BiometricUiState }) {
   if (!state.target || state.phase === "idle") return null
+  if (state.phase === "running" && state.target.includes("fingerprint")) return null
 
   const isFace = state.target.includes("face")
   const title =
@@ -1256,13 +1308,11 @@ function BiometricCeremony({ state }: { state: BiometricUiState }) {
       : "Use the secure biometric prompt shown by your operating system."
 
   return (
-    <div className="fixed inset-0 z-[70] grid place-items-center bg-black/70 p-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[70] grid min-h-[100dvh] place-items-center bg-black/70 p-4 backdrop-blur-sm">
       <div className="w-full max-w-sm rounded-lg border border-white/15 bg-slate-950/95 p-6 text-center text-white shadow-2xl">
-        <div className="mx-auto mb-5 grid h-48 w-48 place-items-center rounded-full border border-blue-300/30 bg-blue-950/30 shadow-[0_0_60px_rgba(59,130,246,0.25)]">
+        <div className="mx-auto mb-5 grid h-36 w-36 place-items-center">
           {state.phase === "success" ? (
-            <div className="grid h-28 w-28 place-items-center rounded-full border-2 border-emerald-300 bg-emerald-400/10">
-              <CheckCircle2 className="h-16 w-16 animate-pulse text-emerald-300" />
-            </div>
+            <CheckCircle2 className="h-20 w-20 text-emerald-300" />
           ) : isFace ? (
             <div className="relative h-36 w-36">
               <div className="absolute inset-2 rounded-[42%] border border-blue-300/70 shadow-[0_0_35px_rgba(34,211,238,0.35)]" />
@@ -1287,6 +1337,64 @@ function BiometricCeremony({ state }: { state: BiometricUiState }) {
         </div>
         <h2 className="text-2xl font-bold">{title}</h2>
         <p className="mt-2 text-sm text-gray-300">{detail}</p>
+      </div>
+    </div>
+  )
+}
+
+function SyncResultPopup({ result, onClose }: { result: SyncDoneState; onClose: () => void }) {
+  if (!result) return null
+
+  const isSuccess = result.status === "success"
+  return (
+    <div className="fixed inset-0 z-[80] grid place-items-center bg-black/60 p-4 backdrop-blur-sm">
+      <div
+        className={`w-full max-w-sm rounded-lg border p-4 text-white shadow-2xl ${
+          isSuccess ? "border-emerald-400/30 bg-slate-950/95" : "border-red-400/30 bg-slate-950/95"
+        }`}
+      >
+        <div className="mb-3 flex items-start justify-between gap-3">
+          <div className="flex items-center gap-3">
+            {isSuccess ? (
+              <CheckCircle2 className="h-8 w-8 text-emerald-300" />
+            ) : (
+              <X className="h-8 w-8 rounded-full border border-red-300/60 p-1 text-red-300" />
+            )}
+            <div>
+              <h2 className="text-base font-semibold">{result.title}</h2>
+              <p className="text-xs text-gray-400">{result.deviceName}</p>
+            </div>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={onClose}
+            className="h-8 w-8 p-0 text-gray-300 hover:bg-white/10"
+            aria-label="Close sync result"
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+        <p className="text-sm text-gray-200">{result.message}</p>
+        <div className="mt-3 grid grid-cols-4 gap-2 rounded-md border border-white/10 bg-white/5 p-2 text-center text-xs">
+          <div>
+            <p className="font-semibold text-white">{result.added}</p>
+            <p className="text-gray-400">Added</p>
+          </div>
+          <div>
+            <p className="font-semibold text-white">{result.updated}</p>
+            <p className="text-gray-400">Updated</p>
+          </div>
+          <div>
+            <p className="font-semibold text-white">{result.unchanged}</p>
+            <p className="text-gray-400">Same</p>
+          </div>
+          <div>
+            <p className="font-semibold text-white">{result.total}</p>
+            <p className="text-gray-400">Received</p>
+          </div>
+        </div>
+        <p className="mt-3 truncate font-mono text-[11px] text-gray-400">{result.deviceId}</p>
       </div>
     </div>
   )
@@ -1454,7 +1562,6 @@ export default function CredStore() {
   const [syncPayload, setSyncPayload] = useState("")
   const [syncPairingQr, setSyncPairingQr] = useState("")
   const [expectedSyncPairing, setExpectedSyncPairing] = useState<ExpectedSyncPairing>(null)
-  const [bluetoothDevices, setBluetoothDevices] = useState<CredStoreBluetoothDevice[]>([])
   const [bluetoothMessage, setBluetoothMessage] = useState("")
   const [isBluetoothReceiving, setIsBluetoothReceiving] = useState(false)
   const [syncOtpInput, setSyncOtpInput] = useState("")
@@ -1485,8 +1592,10 @@ export default function CredStore() {
   const scanVideoRef = useRef<HTMLVideoElement | null>(null)
   const licenseScanVideoRef = useRef<HTMLVideoElement | null>(null)
   const receivedSyncFramesRef = useRef<Record<string, CredStoreSyncFrame[]>>({})
+  const autoSyncSentRef = useRef("")
 
   const themeClass = THEMES[theme]
+  const isAndroidNative = useMemo(() => Capacitor.isNativePlatform() && Capacitor.getPlatform() === "android", [])
   const unlockDelayRemaining = Math.max(0, unlockDelayUntil - Date.now())
   const isUnlockDelayed = unlockDelayRemaining > 0
   const biometricAvailable = biometricAvailability.available
@@ -1494,11 +1603,11 @@ export default function CredStore() {
   const canUseFingerprint = biometricTypeAllowed("fingerprint", biometricAvailability)
   const canUseFace = hasCameraFaceSupport() || biometricTypeAllowed("face", biometricAvailability)
   const savedFingerprintSlot = useMemo(
-    () => vaultRecord?.keySlots.find((slot) => slot.enabled && slot.type === "fingerprint" && slot.biometricKey) || null,
+    () => vaultRecord?.keySlots.find((slot) => slot.enabled && slot.type === "fingerprint") || null,
     [vaultRecord],
   )
   const savedFaceSlot = useMemo(
-    () => vaultRecord?.keySlots.find((slot) => slot.enabled && slot.type === "face" && slot.biometricKey) || null,
+    () => vaultRecord?.keySlots.find((slot) => slot.enabled && slot.type === "face") || null,
     [vaultRecord],
   )
   const biometricRegistrationHint = biometricAvailable
@@ -1838,8 +1947,8 @@ export default function CredStore() {
         setBiometricUi({ target: null, phase: "idle" })
         return
       }
-      if (!biometricTypeAllowed(type, biometricAvailability)) {
-        setBiometricMessage(`${type === "face" ? "Face unlock" : "Fingerprint unlock"} is not reported by this device.`)
+      if (type !== "face" && !biometricTypeAllowed(type, biometricAvailability)) {
+        setBiometricMessage("Fingerprint unlock is not reported by this device.")
         setBiometricUi({ target: null, phase: "idle" })
         return
       }
@@ -2166,7 +2275,7 @@ export default function CredStore() {
     setSyncPayload(nextSyncPayload)
     setSyncPairingQr(pairing.qrValue)
     setSyncCode(pairing.code)
-    setBluetoothDevices([])
+    autoSyncSentRef.current = ""
     setBluetoothMessage("")
     setSyncMessage(
       selectedCredentialIds.size > 0
@@ -2196,6 +2305,7 @@ export default function CredStore() {
           const incomingVaultData = normalizeVaultData(
             JSON.parse(await decryptWithKey(incomingVault.payload, currentVaultCryptoKey)) as VaultData,
           )
+          const mergeSummary = summarizeCredentialMerge(currentVaultData.credentials, incomingVaultData.credentials)
           const mergedVaultData = mergeVaultData(currentVaultData, incomingVaultData)
           const nextVaultRecord: VaultRecord = {
             ...vaultRecord,
@@ -2208,8 +2318,12 @@ export default function CredStore() {
           setCredentials(mergedVaultData.credentials)
           setActiveLicense(mergedVaultData.metadata?.license || null)
           setSyncDone({
+            status: "success",
+            title: "Sync complete",
+            message: "Pairing verified. CredStore merged incoming data without erasing receiver-only records.",
             deviceName: incomingVaultData.metadata?.syncedDevices[0]?.label || "Synced device",
             deviceId: incomingVaultData.metadata?.deviceId || "unknown",
+            ...mergeSummary,
           })
           setSyncOtpInput("")
           setSyncMessage(frameMessage)
@@ -2230,6 +2344,7 @@ export default function CredStore() {
 
         if (trimmed.startsWith(SYNC_PAIRING_PREFIX)) {
           const pairing = decodeSyncPairingPayload(trimmed)
+          setSyncDone(null)
           setExpectedSyncPairing({
             sessionId: pairing.sessionId,
             otp: pairing.otp,
@@ -2290,7 +2405,19 @@ export default function CredStore() {
         setExpectedSyncPairing(null)
         await importVault(vault, "Sync complete. Pairing verified and data was merged without erasing this device.")
       } catch (error) {
-        setSyncMessage(error instanceof Error ? error.message : "Invalid, incomplete, or unreadable sync QR frame.")
+        const message = error instanceof Error ? error.message : "Invalid, incomplete, or unreadable sync QR frame."
+        setSyncDone({
+          status: "error",
+          title: "Sync failed",
+          message,
+          deviceName: "Receiver",
+          deviceId: expectedSyncPairing?.deviceId || "unknown",
+          added: 0,
+          updated: 0,
+          unchanged: 0,
+          total: 0,
+        })
+        setSyncMessage(message)
       }
     },
     [expectedSyncPairing, syncOtpInput, vaultKey, vaultRecord],
@@ -2307,51 +2434,21 @@ export default function CredStore() {
       const rawValue = await scanQrFromVideo(video)
       await importSyncPayload(rawValue)
     } catch (error) {
-      setSyncMessage(error instanceof Error ? error.message : "Camera QR scanning failed.")
+      const message = error instanceof Error ? error.message : "Camera QR scanning failed."
+      setSyncMessage(message)
+      setSyncDone({
+        status: "error",
+        title: "Sync failed",
+        message,
+        deviceName: "Receiver",
+        deviceId: expectedSyncPairing?.deviceId || "unknown",
+        added: 0,
+        updated: 0,
+        unchanged: 0,
+        total: 0,
+      })
     }
-  }, [importSyncPayload])
-
-  const loadBluetoothReceivers = useCallback(async () => {
-    try {
-      if (!syncCode) throw new Error("Generate a pairing QR/OTP first.")
-
-      if (!Capacitor.isNativePlatform() && window.credstoreNative?.localSync) {
-        setBluetoothMessage("Looking for desktop receivers on the local network...")
-        const availability = await window.credstoreNative.localSync.isAvailable()
-        if (!availability.available) throw new Error(availability.message || "Desktop local sync is not available.")
-        const result = await window.credstoreNative.localSync.discoverReceivers({ otp: syncCode })
-        setBluetoothDevices(result.devices || [])
-        setBluetoothMessage(
-          result.devices?.length
-            ? "Pick the desktop receiver that is waiting with this OTP."
-            : "No desktop receivers found. Start the receiver with this OTP and try again.",
-        )
-        return
-      }
-
-      if (!Capacitor.isNativePlatform()) {
-        throw new Error("Desktop local sync is available only in the Electron app, not in a regular browser.")
-      }
-
-      setBluetoothMessage("Looking for local CredStore receivers...")
-      const permissions = await CredStoreBluetooth.requestBluetoothPermissions()
-      if (!permissions.granted) throw new Error("Bluetooth permission was not granted.")
-
-      const availability = await CredStoreBluetooth.isAvailable()
-      if (!availability.available) throw new Error(availability.message || "Bluetooth is not available.")
-
-      const result = await CredStoreBluetooth.listBondedDevices()
-      setBluetoothDevices(result.devices || [])
-      setBluetoothMessage(
-        result.devices?.length
-          ? "Pick the receiver that has scanned this pairing QR."
-          : "No CredStore receivers found. Start receiver mode on the other device and try again.",
-      )
-    } catch (error) {
-      setBluetoothDevices([])
-      setBluetoothMessage(error instanceof Error ? error.message : "Bluetooth receiver discovery failed.")
-    }
-  }, [])
+  }, [expectedSyncPairing?.deviceId, importSyncPayload])
 
   const sendBluetoothSyncPayload = useCallback(
     async (device: CredStoreBluetoothDevice) => {
@@ -2369,18 +2466,121 @@ export default function CredStore() {
             payload: syncPayload,
           })
           setBluetoothMessage(`Encrypted payload sent to ${device.name || device.id}.`)
+          setSyncDone({
+            status: "success",
+            title: "Payload sent",
+            message: "Encrypted vault payload was sent over local Wi-Fi. The receiver will merge matching data.",
+            deviceName: device.name || "Receiver",
+            deviceId: device.id,
+            added: 0,
+            updated: 0,
+            unchanged: 0,
+            total: credentials.length,
+          })
+          autoSyncSentRef.current = checksumText(syncPayload)
           return
         }
 
         setBluetoothMessage(`Sending encrypted payload to ${device.name || device.id} over Bluetooth...`)
         await CredStoreBluetooth.sendPayload({ deviceId: device.id, payload: syncPayload })
         setBluetoothMessage(`Encrypted payload sent to ${device.name || device.id}.`)
+        setSyncDone({
+          status: "success",
+          title: "Payload sent",
+          message: "Encrypted vault payload was sent to the paired receiver. The receiver will merge matching data.",
+          deviceName: device.name || "Receiver",
+          deviceId: device.id,
+          added: 0,
+          updated: 0,
+          unchanged: 0,
+          total: credentials.length,
+        })
+        autoSyncSentRef.current = checksumText(syncPayload)
       } catch (error) {
-        setBluetoothMessage(error instanceof Error ? error.message : "Local payload send failed.")
+        const message = error instanceof Error ? error.message : "Local payload send failed."
+        setBluetoothMessage(message)
+        setSyncDone({
+          status: "error",
+          title: "Sync failed",
+          message,
+          deviceName: device.name || "Receiver",
+          deviceId: device.id,
+          added: 0,
+          updated: 0,
+          unchanged: 0,
+          total: 0,
+        })
       }
     },
-    [syncCode, syncPairingQr, syncPayload],
+    [credentials.length, syncCode, syncPairingQr, syncPayload],
   )
+
+  useEffect(() => {
+    if (!isSyncOpen || syncMode !== "client" || !syncPayload || !syncCode) return
+    const payloadChecksum = checksumText(syncPayload)
+    if (autoSyncSentRef.current === payloadChecksum) return
+
+    let cancelled = false
+    let inFlight = false
+    let nativePermissionChecked = false
+
+    const sendWhenReceiverAppears = async () => {
+      if (cancelled || inFlight || autoSyncSentRef.current === payloadChecksum) return
+      inFlight = true
+
+      try {
+        if (!Capacitor.isNativePlatform() && window.credstoreNative?.localSync) {
+          const availability = await window.credstoreNative.localSync.isAvailable()
+          if (!availability.available) throw new Error(availability.message || "Desktop local sync is not available.")
+          const result = await window.credstoreNative.localSync.discoverReceivers({ otp: syncCode })
+          const receiver = result.devices?.[0]
+          if (!receiver) {
+            setBluetoothMessage("Waiting for paired receiver on the local network...")
+            return
+          }
+          await sendBluetoothSyncPayload(receiver)
+          return
+        }
+
+        if (!Capacitor.isNativePlatform()) {
+          setBluetoothMessage("Waiting for Electron local sync. Browser tabs can only display the pairing QR/OTP.")
+          return
+        }
+
+        if (!nativePermissionChecked) {
+          const permissions = await CredStoreBluetooth.requestBluetoothPermissions()
+          nativePermissionChecked = true
+          if (!permissions.granted) throw new Error("Bluetooth permission was not granted.")
+        }
+
+        const availability = await CredStoreBluetooth.isAvailable()
+        if (!availability.available) throw new Error(availability.message || "Bluetooth is not available.")
+        const result = await CredStoreBluetooth.listBondedDevices()
+        const receiver =
+          result.devices?.find((device) => /credstore/i.test(device.name || "")) ||
+          (result.devices?.length === 1 ? result.devices[0] : null)
+
+        if (!receiver) {
+          setBluetoothMessage("Waiting for paired Bluetooth receiver...")
+          return
+        }
+
+        await sendBluetoothSyncPayload(receiver)
+      } catch (error) {
+        if (!cancelled) setBluetoothMessage(error instanceof Error ? error.message : "Automatic local send failed.")
+      } finally {
+        inFlight = false
+      }
+    }
+
+    setBluetoothMessage("Waiting for the receiver to pair, then CredStore will sync automatically.")
+    sendWhenReceiverAppears()
+    const interval = window.setInterval(sendWhenReceiverAppears, 1800)
+    return () => {
+      cancelled = true
+      window.clearInterval(interval)
+    }
+  }, [isSyncOpen, sendBluetoothSyncPayload, syncCode, syncMode, syncPayload])
 
   const startBluetoothSyncReceiver = useCallback(async () => {
     try {
@@ -2417,26 +2617,30 @@ export default function CredStore() {
       await importSyncPayload(result.payload)
       setBluetoothMessage("Encrypted payload received.")
     } catch (error) {
-      setBluetoothMessage(error instanceof Error ? error.message : "Local payload receive failed.")
+      const message = error instanceof Error ? error.message : "Local payload receive failed."
+      setBluetoothMessage(message)
+      setSyncDone({
+        status: "error",
+        title: "Sync failed",
+        message,
+        deviceName: "Receiver",
+        deviceId: expectedSyncPairing?.deviceId || "unknown",
+        added: 0,
+        updated: 0,
+        unchanged: 0,
+        total: 0,
+      })
     } finally {
       setIsBluetoothReceiving(false)
     }
   }, [expectedSyncPairing, importSyncPayload, syncOtpInput])
 
-  const stopBluetoothSyncReceiver = useCallback(async () => {
-    try {
-      if (!Capacitor.isNativePlatform() && window.credstoreNative?.localSync) {
-        await window.credstoreNative.localSync.stopReceiver()
-      } else {
-        await CredStoreBluetooth.stopReceiver()
-      }
-      setBluetoothMessage("Local payload receiver stopped.")
-    } catch (error) {
-      setBluetoothMessage(error instanceof Error ? error.message : "Unable to stop Bluetooth receiver.")
-    } finally {
-      setIsBluetoothReceiving(false)
-    }
-  }, [])
+  useEffect(() => {
+    if (!isSyncOpen || syncMode !== "receiver" || isBluetoothReceiving) return
+    const hasPairing = Boolean(expectedSyncPairing) || syncOtpInput.trim().replace(/\s+/g, "").length === 8
+    if (!hasPairing) return
+    startBluetoothSyncReceiver()
+  }, [expectedSyncPairing, isBluetoothReceiving, isSyncOpen, startBluetoothSyncReceiver, syncMode, syncOtpInput])
 
   const verifyLicenseToken = useCallback(async (token: string): Promise<LicenseRecord> => {
     await assertMonotonicLicenseClock()
@@ -2780,6 +2984,7 @@ export default function CredStore() {
                 onChange={(event) => setMasterPassword(event.target.value)}
                 className={`bg-white/5 text-sm text-white placeholder:text-gray-400 ${hasError ? "border-red-500" : "border-white/20"}`}
                 placeholder="Enter or create master key"
+                {...NO_IME_LEARNING_PROPS}
                 onKeyDown={(event) => {
                   if (event.key === "Enter") handleUnlock()
                 }}
@@ -2824,7 +3029,7 @@ export default function CredStore() {
                   variant="outline"
                   className="w-full border-white/20 bg-white/5 text-xs text-white hover:bg-white/10"
                   onClick={() => handleBiometricUnlock("face")}
-                  disabled={biometricUi.phase === "running" || !canUseFace}
+                  disabled={biometricUi.phase === "running" || (!savedFaceSlot && !canUseFace)}
                 >
                   {biometricButtonIcon("login-face", <ScanFace className="mr-2 h-4 w-4" />)}
                   Face
@@ -2848,6 +3053,7 @@ export default function CredStore() {
     >
       <DesktopWindowChrome />
       <BiometricCeremony state={biometricUi} />
+      <SyncResultPopup result={syncDone} onClose={() => setSyncDone(null)} />
       <div className="mx-auto flex h-full max-w-4xl flex-col gap-4 overflow-hidden px-3 pb-3">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0 flex items-center gap-2">
@@ -2881,8 +3087,9 @@ export default function CredStore() {
               </DialogTrigger>
               <DialogContent
                 className={
-                  "grid max-h-[calc(100dvh-4.75rem)] w-[calc(100vw-1rem)] max-w-[26rem] " +
-                  "grid-rows-[auto_minmax(0,1fr)] gap-0 overflow-hidden border-gray-700 bg-gray-900/95 p-0 text-white"
+                  "!fixed !inset-0 !left-0 !top-0 !z-50 grid h-[100dvh] max-h-none w-screen max-w-none " +
+                  "!translate-x-0 !translate-y-0 grid-rows-[auto_minmax(0,1fr)] gap-0 overflow-hidden rounded-none " +
+                  "border-0 border-gray-700 bg-gray-900/95 p-0 text-white sm:rounded-none"
                 }
               >
                 <DialogHeader className="border-b border-white/10 px-4 pb-3 pt-4">
@@ -2891,7 +3098,7 @@ export default function CredStore() {
                     Pair devices with a short QR/OTP, then transfer the encrypted vault over a local device channel.
                   </DialogDescription>
                 </DialogHeader>
-                <div className="min-h-0 space-y-3 overflow-y-auto overscroll-contain px-4 pb-16 pt-3 sm:pb-4">
+                <div className="mx-auto min-h-0 w-full max-w-[28rem] space-y-3 overflow-y-auto overscroll-contain px-4 pb-24 pt-3 sm:pb-6">
                   <div className="grid grid-cols-2 gap-2">
                     <Button
                       type="button"
@@ -2932,10 +3139,7 @@ export default function CredStore() {
                   {syncMode === "client" ? (
                     <div className="space-y-3">
                         <div className="rounded-lg border border-white/15 bg-gradient-to-br from-white to-slate-100 p-3 text-center text-slate-950 shadow-xl shadow-black/30">
-                          <div className="mb-2 flex items-center justify-center gap-2 text-xs font-semibold text-slate-700">
-                            <LogoMark className="h-5 w-5" />
-                            CredStore One-Time Sync
-                          </div>
+                          <div className="mb-2 text-xs font-semibold text-slate-700">One Time Sync</div>
                           {syncPairingQr ? (
                           <QrRenderBoundary
                             key={syncPairingQr}
@@ -2943,21 +3147,15 @@ export default function CredStore() {
                           >
                             <div
                               className={
-                                "mx-auto grid aspect-square w-full max-w-[244px] place-items-center rounded-lg " +
-                                "border border-slate-200 bg-white p-2 shadow-inner sm:max-w-[300px]"
+                                "mx-auto grid aspect-square w-full max-w-[312px] place-items-center rounded-lg " +
+                                "border border-slate-200 bg-white p-1 shadow-inner"
                               }
                             >
                               <QRCodeCanvas
                                 value={syncPairingQr}
-                                size={224}
+                                size={300}
                                 level="M"
-                                includeMargin
-                                imageSettings={{
-                                  src: RUNTIME_LOGO_PATH,
-                                  height: 28,
-                                  width: 28,
-                                  excavate: true,
-                                }}
+                                includeMargin={false}
                               />
                             </div>
                           </QrRenderBoundary>
@@ -2983,32 +3181,12 @@ export default function CredStore() {
                       </Button>
                       <div className="space-y-2 rounded-md border border-white/10 bg-white/5 p-3">
                         <div className="flex items-center justify-between gap-2">
-                          <p className="text-xs font-medium text-gray-200">Local encrypted transfer</p>
-                          <Badge className="bg-white/10 text-gray-300">LAN / Bluetooth</Badge>
+                          <p className="text-xs font-medium text-gray-200">Automatic local encrypted transfer</p>
+                          <Badge className="bg-white/10 text-gray-300">Auto</Badge>
                         </div>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={loadBluetoothReceivers}
-                          disabled={!syncPayload}
-                          className="w-full border-white/20 bg-white/5 text-sm text-white hover:bg-white/10"
-                        >
-                          Find Nearby Receivers
-                        </Button>
-                        {bluetoothDevices.map((device) => (
-                          <Button
-                            key={device.id}
-                            type="button"
-                            variant="outline"
-                            onClick={() => sendBluetoothSyncPayload(device)}
-                            className="w-full justify-start border-white/20 bg-white/5 text-sm text-white hover:bg-white/10"
-                          >
-                            Send encrypted payload to {device.name || device.id}
-                          </Button>
-                        ))}
                         <p className="text-xs text-gray-400">
-                          QR/OTP only pairs the devices. Desktop uses local Wi-Fi/LAN; mobile uses the native local
-                          Bluetooth bridge. The vault payload remains encrypted.
+                          Scan the QR or type the OTP on the receiver. The client then sends the encrypted vault payload
+                          automatically over LAN/Bluetooth when the paired receiver appears.
                         </p>
                       </div>
                       <div className="rounded-md border border-white/10 bg-white/5 p-3">
@@ -3025,22 +3203,15 @@ export default function CredStore() {
                   ) : (
                     <div className="space-y-3">
                         <div className="rounded-lg border border-white/15 bg-gradient-to-br from-white to-slate-100 p-3 text-center text-slate-950 shadow-xl shadow-black/30">
-                          <div className="mb-2 flex items-center justify-center gap-2 text-xs font-semibold text-slate-700">
-                            <LogoMark className="h-5 w-5" />
-                            CredStore Receiver
-                          </div>
                           <video
                             ref={scanVideoRef}
                             className={
-                              "mx-auto aspect-[4/3] w-full max-w-[244px] rounded-lg border border-slate-200 " +
-                              "bg-black object-cover shadow-inner sm:aspect-square sm:max-w-[300px]"
+                              "mx-auto aspect-[3/4] w-full max-w-[340px] rounded-lg border border-slate-200 " +
+                              "bg-black object-cover shadow-inner sm:aspect-square"
                             }
                             muted
                           playsInline
                         />
-                        <p className="mt-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-                        Scan Pairing QR
-                      </p>
                       </div>
                       <Button onClick={scanSyncQr} className="w-full bg-gradient-to-r from-purple-500 to-blue-500 text-sm">
                         Open Camera and Scan
@@ -3053,57 +3224,18 @@ export default function CredStore() {
                           className="h-10 border-white/20 bg-black/20 font-mono text-sm uppercase tracking-[0.25em] text-white"
                           maxLength={8}
                           placeholder="77C74FA2"
+                          {...NO_IME_LEARNING_PROPS}
                         />
                         <p className="text-xs text-gray-400">
                           Scan the pairing QR to fill this automatically, or type the 8-character OTP from the client.
                         </p>
                       </div>
-                      <div className="space-y-2 rounded-md border border-white/10 bg-white/5 p-3">
-                        <Button
-                          type="button"
-                          onClick={startBluetoothSyncReceiver}
-                          disabled={isBluetoothReceiving || (!expectedSyncPairing && !syncOtpInput.trim())}
-                          className="w-full bg-gradient-to-r from-purple-500 to-blue-500 text-sm"
-                        >
-                          {isBluetoothReceiving ? (
-                            <>
-                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                              Waiting for Payload
-                            </>
-                          ) : (
-                            "Start Local Payload Receiver"
-                          )}
-                        </Button>
-                        {isBluetoothReceiving && (
-                          <Button
-                            type="button"
-                            variant="outline"
-                            onClick={stopBluetoothSyncReceiver}
-                            className="w-full border-white/20 bg-white/5 text-sm text-white hover:bg-white/10"
-                          >
-                            Stop Receiver
-                          </Button>
-                        )}
-                        <p className="text-xs text-gray-400">
-                          The receiver imports only a payload matching the scanned QR or typed OTP.
-                        </p>
-                      </div>
                       <p className="text-xs text-gray-300">
-                        Pair first, then receive the encrypted local payload. No vault data is stored in the QR.
+                        Pairing starts the local payload receiver automatically. No vault data is stored in the QR.
                       </p>
                     </div>
                   )}
                   {bluetoothMessage && <p className="text-xs text-blue-200">{bluetoothMessage}</p>}
-                  {syncDone && (
-                    <div className="flex items-center gap-3 rounded-md border border-emerald-400/30 bg-emerald-500/10 p-3 text-emerald-100">
-                      <CheckCircle2 className="h-7 w-7 animate-pulse text-emerald-300" />
-                      <div className="min-w-0 text-xs">
-                        <p className="font-semibold">Sync complete</p>
-                        <p className="truncate text-emerald-200">{syncDone.deviceName}</p>
-                        <p className="truncate font-mono text-[11px] text-emerald-300">{syncDone.deviceId}</p>
-                      </div>
-                    </div>
-                  )}
                   {syncMessage && <p className="text-xs text-gray-300">{syncMessage}</p>}
                 </div>
               </DialogContent>
@@ -3215,6 +3347,7 @@ export default function CredStore() {
                               onChange={(event) => setNewMasterKeyLabel(event.target.value)}
                               className="border-white/20 bg-white/5 text-sm text-white"
                               placeholder="Label"
+                              {...NO_IME_LEARNING_PROPS}
                             />
                             <Input
                               value={newMasterKey}
@@ -3222,6 +3355,7 @@ export default function CredStore() {
                               className="border-white/20 bg-white/5 text-sm text-white"
                               placeholder="New password key"
                               type="password"
+                              {...NO_IME_LEARNING_PROPS}
                             />
                           </div>
                           <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
@@ -3318,6 +3452,7 @@ export default function CredStore() {
                             onChange={(event) => setLicenseToken(event.target.value)}
                             className="min-h-[72px] border-white/20 bg-white/5 text-xs text-white"
                             placeholder="Paste signed enterprise license token"
+                            {...NO_IME_LEARNING_PROPS}
                           />
                           <video
                             ref={licenseScanVideoRef}
@@ -3394,6 +3529,7 @@ export default function CredStore() {
                               className="border-white/20 bg-white/5 text-sm text-white"
                               placeholder={vaultData.adminAuth?.passwordHash ? "Admin password" : "Set admin password"}
                               type="password"
+                              {...NO_IME_LEARNING_PROPS}
                             />
                             <Button
                               type="button"
@@ -3413,12 +3549,12 @@ export default function CredStore() {
                               </Badge>
                             </div>
                             {adminAuthenticatorUri && (
-                              <div className="rounded-md bg-white p-3 text-center text-gray-900">
+                              <div className="flex flex-col items-center rounded-md bg-white p-3 text-center text-gray-900">
                                 <div className="mb-2 flex items-center justify-center gap-2 text-xs font-semibold">
                                   <ShieldCheck className="h-4 w-4 text-purple-700" />
                                   CredStore Admin Authenticator
                                 </div>
-                                <QRCodeCanvas value={adminAuthenticatorUri} size={184} level="M" includeMargin />
+                                <QRCodeCanvas className="block" value={adminAuthenticatorUri} size={184} level="M" includeMargin />
                               </div>
                             )}
                             <Input
@@ -3427,6 +3563,7 @@ export default function CredStore() {
                               className="border-white/20 bg-white/5 text-center font-mono text-lg tracking-[0.35em] text-white"
                               inputMode="numeric"
                               placeholder="000000"
+                              {...NO_IME_LEARNING_PROPS}
                             />
                             <div className="grid gap-2 sm:grid-cols-2">
                               <Button
@@ -3494,6 +3631,7 @@ export default function CredStore() {
                               onChange={(event) => setNewProfileName(event.target.value)}
                               className="border-white/20 bg-white/5 text-sm text-white"
                               placeholder="Employee profile name"
+                              {...NO_IME_LEARNING_PROPS}
                             />
                             <Select value={selectedGroupId || "none"} onValueChange={(value) => setSelectedGroupId(value === "none" ? "" : value)}>
                               <SelectTrigger className="border-white/20 bg-white/5 text-sm text-white">
@@ -3523,6 +3661,7 @@ export default function CredStore() {
                               onChange={(event) => setNewGroupName(event.target.value)}
                               className="border-white/20 bg-white/5 text-sm text-white"
                               placeholder="Project group name"
+                              {...NO_IME_LEARNING_PROPS}
                             />
                             <Button
                               type="button"
@@ -3662,6 +3801,8 @@ export default function CredStore() {
                           )}
                         </section>
 
+                        <AdminManualSection />
+
                         <UserManualSection />
                       </div>
                     )}
@@ -3742,6 +3883,7 @@ export default function CredStore() {
                         onChange={(event) => setDraft((previous) => ({ ...previous, title: event.target.value }))}
                         className="h-8 border-white/20 bg-white/5 text-sm text-white"
                         placeholder="Google"
+                        {...NO_IME_LEARNING_PROPS}
                       />
                     </div>
                     <div className="space-y-1">
@@ -3757,6 +3899,7 @@ export default function CredStore() {
                               onChange={(event) => updateDraftField(field.id, { key: event.target.value })}
                               className="h-8 border-white/20 bg-white/5 text-sm text-white"
                               placeholder="Key"
+                              {...NO_IME_LEARNING_PROPS}
                             />
                             <div className="flex min-w-0 gap-1">
                               <Input
@@ -3764,7 +3907,8 @@ export default function CredStore() {
                                 onChange={(event) => updateDraftField(field.id, { value: event.target.value })}
                                 className="h-8 border-white/20 bg-white/5 text-sm text-white"
                                 placeholder="Value"
-                                type={field.secret ? "password" : "text"}
+                                type={isAndroidNative || field.secret ? "password" : "text"}
+                                {...NO_IME_LEARNING_PROPS}
                               />
                               {field.key.toLowerCase().includes("pass") && (
                                 <Button
@@ -3894,6 +4038,7 @@ export default function CredStore() {
                         onChange={(event) => setDraft((previous) => ({ ...previous, notes: event.target.value }))}
                         className="min-h-[84px] scroll-mt-24 border-white/20 bg-white/5 text-sm text-white"
                         placeholder="Optional notes"
+                        {...NO_IME_LEARNING_PROPS}
                       />
                     </div>
                     <Button

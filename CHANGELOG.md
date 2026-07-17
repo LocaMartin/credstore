@@ -2,6 +2,20 @@
 
 All notable changes to CredStore will be documented in this file.
 
+## [1.1.24] - 2026-07-17
+
+### Fixed
+
+- Fixed `credstore -debug` launching installed desktop builds against `http://localhost:3000`. Debug mode now opens
+  developer tools and debug logging while still loading the packaged offline app unless `NODE_ENV=development` is set.
+- Changed local sync to auto-start the receiver after QR/OTP pairing and auto-send the encrypted payload from the client
+  when the paired receiver appears.
+- Reworked the sync screen as a full-page mobile flow, removed manual receiver/send buttons, enlarged the receiver camera
+  preview, and removed QR logo excavation for cleaner pairing QR codes.
+- Simplified biometric UI overlays so fingerprint uses the OS prompt directly and success feedback is a minimal checkmark.
+- Hardened Android credential editing against IME/logcat leakage by disabling WebView autofill/save state and marking
+  sensitive vault input fields with password/no-suggestions semantics.
+
 ## [1.0.23] - 2026-07-17
 
 ### Added

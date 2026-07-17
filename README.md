@@ -4,7 +4,7 @@
   <img src="./.res/text.svg" alt="CredStore">
 </div>
 
-<p align="center"><b>1.0.23</b></p>
+<p align="center"><b>1.1.24</b></p>
 
 CredStore is a strictly offline personal credential manager for desktop, web, and Android.
 

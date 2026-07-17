@@ -8,10 +8,12 @@ import android.os.Build;
 import android.os.Debug;
 import android.graphics.Color;
 import android.os.Bundle;
+import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
 import android.webkit.CookieManager;
 import android.webkit.WebStorage;
+import android.webkit.WebView;
 
 import com.getcapacitor.BridgeActivity;
 
@@ -49,6 +51,22 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(CredStoreBiometricPlugin.class);
         registerPlugin(CredStoreBluetoothPlugin.class);
         super.onCreate(savedInstanceState);
+        hardenWebViewInputState();
+    }
+
+    private void hardenWebViewInputState() {
+        try {
+            WebView webView = getBridge().getWebView();
+            if (webView == null) return;
+
+            webView.setSaveEnabled(false);
+            webView.setSaveFromParentEnabled(false);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                webView.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS);
+            }
+        } catch (Exception ignored) {
+            // Keep startup available if the Capacitor WebView is not ready yet.
+        }
     }
 
     private void clearRestoredStateAfterFreshInstall() {
