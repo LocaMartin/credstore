@@ -92,8 +92,16 @@
           <form id="certificate-form" class="certificate-panel stack">
             <h3>Premium Certificate Builder</h3>
             <label>
+              Ticket / certificate ID
+              <input name="ticketId" maxlength="120" placeholder="VDP ticket number or certificate ID" />
+            </label>
+            <label>
               Hunter name
               <input name="hunterName" required maxlength="120" placeholder="Bug hunter name" />
+            </label>
+            <label>
+              CVSS score
+              <input name="cvssScore" maxlength="12" placeholder="9.8" />
             </label>
             <label>
               Severity
@@ -108,6 +116,10 @@
             <label>
               Bug title
               <input name="title" required maxlength="180" placeholder="Stored XSS in notes field" />
+            </label>
+            <label>
+              Bug description
+              <textarea name="bugDescription" data-markdown-editor maxlength="1200" placeholder="Short validated impact summary shown on the certificate."></textarea>
             </label>
             <label>
               Certificate note

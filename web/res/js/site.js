@@ -245,52 +245,183 @@ function drawLogoQr(token) {
 
 // PDF
 
-function generateCertificatePdf(values) {
+let cachedLogoDataUrl = "";
+
+async function loadLogoDataUrl() {
+  if (cachedLogoDataUrl) return cachedLogoDataUrl;
+  try {
+    const logoUrl = document.querySelector(".brand img")?.src || "/credstore/web/res/img/logo.svg";
+    const response = await fetch(logoUrl);
+    const svg = await response.text();
+    const objectUrl = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
+    cachedLogoDataUrl = await new Promise((resolve, reject) => {
+      const image = new Image();
+      image.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = 160;
+        canvas.height = 160;
+        const context = canvas.getContext("2d");
+        context.clearRect(0, 0, canvas.width, canvas.height);
+        context.drawImage(image, 0, 0, canvas.width, canvas.height);
+        URL.revokeObjectURL(objectUrl);
+        resolve(canvas.toDataURL("image/png"));
+      };
+      image.onerror = () => {
+        URL.revokeObjectURL(objectUrl);
+        reject(new Error("Logo rendering failed"));
+      };
+      image.src = objectUrl;
+    });
+  } catch {
+    cachedLogoDataUrl = "";
+  }
+  return cachedLogoDataUrl;
+}
+
+function setPdfHexColor(pdf, hex, target = "fill") {
+  const clean = hex.replace("#", "");
+  const parts = clean.match(/.{2}/g)?.map((part) => parseInt(part, 16)) || [255, 255, 255];
+  if (target === "draw") pdf.setDrawColor(parts[0], parts[1], parts[2]);
+  else pdf.setFillColor(parts[0], parts[1], parts[2]);
+}
+
+function sanitizeCertificateText(value, fallback = "") {
+  return String(value || fallback)
+    .replace(/[#*_`>\[\]()]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function certificateId(values) {
+  const raw = sanitizeCertificateText(values.ticketId || values.id || "");
+  if (raw) return raw.toUpperCase();
+  const seed = `${values.hunterName || "researcher"}-${values.title || "report"}-${Date.now()}`;
+  let hash = 0;
+  for (let index = 0; index < seed.length; index += 1) {
+    hash = (hash * 31 + seed.charCodeAt(index)) >>> 0;
+  }
+  return `CS-VDP-${hash.toString(16).toUpperCase().padStart(8, "0")}`;
+}
+
+async function generateCertificatePdf(values) {
   const jsPDF = window.jspdf?.jsPDF;
   if (!jsPDF) {
     alert("PDF engine is still loading. Try again in a moment.");
     return;
   }
+  const status = document.getElementById("certificate-status");
+  if (status) status.textContent = "Generating premium certificate PDF...";
+  const logoDataUrl = await loadLogoDataUrl();
+  const id = certificateId(values);
+  const hunterName = sanitizeCertificateText(values.hunterName, "Security Researcher");
+  const bugTitle = sanitizeCertificateText(values.title, "Accepted CredStore Security Report");
+  const bugDescription = sanitizeCertificateText(
+    values.bugDescription,
+    "Validated vulnerability report accepted by the CredStore Vulnerability Disclosure Program.",
+  );
+  const note = sanitizeCertificateText(
+    values.note,
+    "For responsible disclosure and helping improve CredStore security.",
+  );
+  const severity = sanitizeCertificateText(values.severity, "Informational");
+  const cvssScore = sanitizeCertificateText(values.cvssScore, "N/A");
+  const issuedAt = new Date().toISOString().slice(0, 10);
   const pdf = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
-  pdf.setFillColor(15, 10, 35);
+
+  setPdfHexColor(pdf, "#080a1f");
   pdf.rect(0, 0, 842, 595, "F");
-  pdf.setFillColor(91, 33, 182);
-  pdf.roundedRect(44, 44, 754, 507, 28, 28, "F");
-  pdf.setFillColor(255, 255, 255);
+  setPdfHexColor(pdf, "#11113b");
+  pdf.roundedRect(28, 28, 786, 539, 34, 34, "F");
+  setPdfHexColor(pdf, "#12213f");
+  pdf.roundedRect(50, 50, 742, 495, 26, 26, "F");
+
   pdf.setGState(new pdf.GState({ opacity: 0.08 }));
-  pdf.roundedRect(62, 62, 718, 471, 22, 22, "F");
+  setPdfHexColor(pdf, "#8b5cf6");
+  pdf.circle(190, 92, 160, "F");
+  setPdfHexColor(pdf, "#3b82f6");
+  pdf.circle(722, 96, 150, "F");
+  setPdfHexColor(pdf, "#f6c85f");
+  pdf.circle(746, 488, 122, "F");
   pdf.setGState(new pdf.GState({ opacity: 1 }));
+
+  setPdfHexColor(pdf, "#f6c85f", "draw");
+  pdf.setLineWidth(2);
+  pdf.roundedRect(66, 66, 710, 463, 18, 18, "S");
+  pdf.setLineWidth(0.8);
+  pdf.line(92, 112, 750, 112);
+  pdf.line(92, 482, 750, 482);
+  pdf.setLineWidth(3);
+  pdf.line(92, 92, 170, 92);
+  pdf.line(672, 92, 750, 92);
+  pdf.line(92, 504, 170, 504);
+  pdf.line(672, 504, 750, 504);
+
+  if (logoDataUrl) {
+    pdf.addImage(logoDataUrl, "PNG", 94, 78, 42, 42);
+  }
+
   pdf.setTextColor(248, 250, 252);
   pdf.setFont("helvetica", "bold");
+  pdf.setFontSize(15);
+  pdf.text("CredStore", logoDataUrl ? 146 : 94, 100);
+  pdf.setFontSize(10);
+  pdf.setTextColor(196, 181, 253);
+  pdf.text(`Certificate ID: ${id}`, 560, 100, { maxWidth: 190 });
+
+  pdf.setTextColor(246, 200, 95);
   pdf.setFontSize(14);
-  pdf.text("CredStore", 92, 98);
-  pdf.setFontSize(34);
-  pdf.text("Security Recognition Certificate", 92, 155);
+  pdf.text("CERTIFICATE OF APPRECIATION", 421, 152, { align: "center" });
+  pdf.setTextColor(255, 255, 255);
+  pdf.setFontSize(42);
+  pdf.text("Security Recognition", 421, 206, { align: "center" });
   pdf.setFont("helvetica", "normal");
   pdf.setFontSize(13);
-  pdf.setTextColor(221, 214, 254);
-  pdf.text("This certificate recognizes responsible vulnerability disclosure by", 92, 198);
+  pdf.setTextColor(203, 213, 225);
+  pdf.text("Presented to", 421, 242, { align: "center" });
+
   pdf.setTextColor(255, 255, 255);
   pdf.setFont("helvetica", "bold");
-  pdf.setFontSize(30);
-  pdf.text(values.hunterName || "Security Researcher", 92, 248, { maxWidth: 650 });
-  pdf.setFontSize(20);
-  pdf.text(values.title || "Accepted CredStore Security Report", 92, 314, { maxWidth: 650 });
-  pdf.setFontSize(15);
-  pdf.setTextColor(196, 181, 253);
-  pdf.text(`Severity: ${values.severity || "Informational"}`, 92, 360);
-  pdf.setTextColor(226, 232, 240);
+  pdf.setFontSize(34);
+  pdf.text(hunterName, 421, 288, { align: "center", maxWidth: 610 });
+
+  pdf.setFontSize(17);
+  pdf.setTextColor(248, 250, 252);
+  pdf.text(bugTitle, 421, 334, { align: "center", maxWidth: 620 });
+
+  pdf.setFillColor(255, 255, 255);
+  pdf.setGState(new pdf.GState({ opacity: 0.08 }));
+  pdf.roundedRect(126, 360, 590, 78, 12, 12, "F");
+  pdf.setGState(new pdf.GState({ opacity: 1 }));
   pdf.setFont("helvetica", "normal");
-  pdf.setFontSize(12);
-  pdf.text(values.note || "For responsible disclosure and helping improve CredStore security.", 92, 400, {
-    maxWidth: 630,
-  });
-  pdf.setTextColor(255, 255, 255);
+  pdf.setFontSize(10.5);
+  pdf.setTextColor(226, 232, 240);
+  pdf.text(pdf.splitTextToSize(bugDescription, 540), 151, 386);
+
   pdf.setFont("helvetica", "bold");
-  pdf.text("CredStore Vulnerability Disclosure Program", 92, 500);
+  pdf.setFontSize(12);
+  pdf.setTextColor(246, 200, 95);
+  pdf.text(`Severity: ${severity}`, 151, 460);
+  pdf.text(`CVSS: ${cvssScore}`, 332, 460);
+  pdf.text(`Issued: ${issuedAt}`, 456, 460);
+
+  pdf.setFont("helvetica", "normal");
+  pdf.setFontSize(11);
+  pdf.setTextColor(203, 213, 225);
+  pdf.text(pdf.splitTextToSize(note, 540), 151, 492);
+
+  pdf.setFont("helvetica", "bold");
+  pdf.setFontSize(10);
+  pdf.setTextColor(248, 250, 252);
+  pdf.text("CredStore Vulnerability Disclosure Program", 94, 524);
   pdf.setTextColor(196, 181, 253);
-  pdf.text(new Date().toISOString().slice(0, 10), 660, 500);
-  const fileName = `credstore-certificate-${String(values.hunterName || "researcher").replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.pdf`;
+  pdf.text("Zero-knowledge offline security project", 574, 524);
+
+  const safeName = String(hunterName || "researcher")
+    .replace(/[^a-z0-9]+/gi, "-")
+    .replace(/^-|-$/g, "")
+    .toLowerCase();
+  const safeId = id.replace(/[^a-z0-9]+/gi, "-").toLowerCase();
+  const fileName = `credstore-certificate-${safeId || safeName}.pdf`;
   const rawPdfData = pdf.output("datauristring");
   pendingCertificateAttachment = {
     name: fileName,
@@ -302,7 +433,6 @@ function generateCertificatePdf(values) {
     nameInput.value = pendingCertificateAttachment.name;
     dataInput.value = pendingCertificateAttachment.data;
   }
-  const status = document.getElementById("certificate-status");
   if (status) status.textContent = "PDF generated and attached to admin chat.";
   pdf.save(fileName);
 }
@@ -523,9 +653,9 @@ function initAdminPage() {
     const data = await response.json();
     renderList("admin-complaints", response.ok ? data.items || [] : [], "transaction search");
   });
-  document.getElementById("certificate-form")?.addEventListener("submit", (event) => {
+  document.getElementById("certificate-form")?.addEventListener("submit", async (event) => {
     event.preventDefault();
-    generateCertificatePdf(formData(event.currentTarget));
+    await generateCertificatePdf(formData(event.currentTarget));
   });
   document.getElementById("response-form")?.addEventListener("submit", async (event) => {
     event.preventDefault();
