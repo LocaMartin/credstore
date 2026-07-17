@@ -3,8 +3,13 @@ const googleClientId = "7346060566-39riegeih7sclmbcfenvqg9l2ggn0fnh.apps.googleu
 let currentLicense = "";
 let adminToken = "";
 let pendingCertificateAttachment = null;
+const markdownEditors = new WeakMap();
 
 function formData(form) {
+  form.querySelectorAll("textarea[data-markdown-editor]").forEach((textarea) => {
+    const editor = markdownEditors.get(textarea);
+    if (editor) textarea.value = editor.value();
+  });
   return Object.fromEntries(new FormData(form).entries());
 }
 
@@ -32,6 +37,10 @@ async function readFileAsDataUrl(file) {
     reader.onerror = () => reject(new Error("Screenshot could not be read."));
     reader.readAsDataURL(file);
   });
+}
+
+function readAttachmentAsDataUrl(file) {
+  return readFileAsDataUrl(file);
 }
 
 function escapeHtml(value) {
@@ -96,6 +105,38 @@ function initMarkdownEditors() {
   document.querySelectorAll("textarea[data-markdown-editor]").forEach((textarea) => {
     if (textarea.dataset.editorReady) return;
     textarea.dataset.editorReady = "true";
+    if (window.EasyMDE) {
+      const editor = new window.EasyMDE({
+        element: textarea,
+        autofocus: false,
+        autosave: { enabled: false },
+        forceSync: true,
+        maxHeight: "360px",
+        minHeight: "160px",
+        nativeSpellcheck: true,
+        placeholder: textarea.getAttribute("placeholder") || "Write Markdown...",
+        renderingConfig: { codeSyntaxHighlighting: false, singleLineBreaks: false },
+        shortcuts: { drawTable: null, toggleFullScreen: null, toggleSideBySide: null },
+        spellChecker: false,
+        status: ["lines", "words"],
+        toolbar: [
+          "bold",
+          "italic",
+          "heading",
+          "|",
+          "quote",
+          "unordered-list",
+          "ordered-list",
+          "code",
+          "link",
+          "|",
+          "preview",
+          "guide",
+        ],
+      });
+      markdownEditors.set(textarea, editor);
+      return;
+    }
     const toolbar = document.createElement("div");
     toolbar.className = "editor-toolbar";
     toolbar.innerHTML = `
@@ -150,6 +191,16 @@ function renderChat(elementId, messages) {
       </article>`;
     })
     .join("");
+}
+
+async function readChatAttachment(form) {
+  const file = form.attachment?.files?.[0];
+  if (!file) return {};
+  const data = await readAttachmentAsDataUrl(file);
+  return {
+    attachmentName: file.name,
+    attachmentData: data,
+  };
 }
 
 function drawLogoQr(token) {
@@ -343,13 +394,15 @@ function initKeyPage() {
 function initFncPage() {
   document.getElementById("contact-form")?.addEventListener("submit", async (event) => {
     event.preventDefault();
+    const form = event.currentTarget;
     const status = document.getElementById("contact-status");
     if (status) status.textContent = "Sending...";
     try {
-      const data = await postJson("/contact", formData(event.currentTarget));
+      const data = await postJson("/contact", formData(form));
       if (status) status.textContent = `Feedback received. Ticket: ${data.id || "created"}`;
       localStorage.setItem("credstore_last_ticket_id", data.id || "");
-      event.currentTarget.reset();
+      form.reset();
+      markdownEditors.get(form.message)?.value("");
     } catch (error) {
       if (status) status.textContent = error instanceof Error ? error.message : "Message failed.";
     }
@@ -357,15 +410,17 @@ function initFncPage() {
 
   document.getElementById("complaint-form")?.addEventListener("submit", async (event) => {
     event.preventDefault();
+    const form = event.currentTarget;
     const status = document.getElementById("complaint-status");
     if (status) status.textContent = "Submitting...";
     try {
-      const values = formData(event.currentTarget);
-      values.screenshot = await readFileAsDataUrl(event.currentTarget.screenshot.files[0]);
+      const values = formData(form);
+      values.screenshot = await readFileAsDataUrl(form.screenshot?.files?.[0]);
       const data = await postJson("/complaints", values);
       if (status) status.textContent = `Complaint received. Ticket: ${data.id || values.transactionId}`;
       localStorage.setItem("credstore_last_ticket_id", data.id || "");
-      event.currentTarget.reset();
+      form.reset();
+      markdownEditors.get(form.message)?.value("");
     } catch (error) {
       if (status) status.textContent = error instanceof Error ? error.message : "Complaint failed.";
     }
@@ -377,13 +432,17 @@ function initVdpPage() {
   loadPublicHall();
   document.getElementById("bug-form")?.addEventListener("submit", async (event) => {
     event.preventDefault();
+    const form = event.currentTarget;
     const status = document.getElementById("bug-status");
-    if (status) status.textContent = "Creating VDP ticket...";
+    if (status) status.textContent = "Submitting report...";
     try {
-      const data = await postJson("/bugs", formData(event.currentTarget));
-      if (status) status.textContent = `VDP ticket created: ${data.id}. Save this ID for follow-up.`;
+      const values = formData(form);
+      values.screenshot = await readFileAsDataUrl(form.screenshot?.files?.[0]);
+      const data = await postJson("/bugs", values);
+      if (status) status.textContent = `Report submitted. Ticket: ${data.id}. Save this ID for follow-up.`;
       localStorage.setItem("credstore_last_ticket_id", data.id || "");
-      event.currentTarget.reset();
+      form.reset();
+      markdownEditors.get(form.message)?.value("");
     } catch (error) {
       if (status) status.textContent = error instanceof Error ? error.message : "Bug report failed.";
     }
@@ -415,13 +474,17 @@ function initPublicTicketChat() {
     event.preventDefault();
     const status = document.getElementById("ticket-chat-status");
     try {
+      const attachment = await readChatAttachment(chatForm);
       const data = await postJson("/tickets/chat", {
         id: chatForm.ticketId.value,
         email: chatForm.email.value,
-        message: chatForm.message.value,
+        message: markdownEditors.get(chatForm.message)?.value() || chatForm.message.value,
+        ...attachment,
       });
       renderChat("ticket-chat-thread", data.messages || []);
       chatForm.message.value = "";
+      markdownEditors.get(chatForm.message)?.value("");
+      if (chatForm.attachment) chatForm.attachment.value = "";
       if (status) status.textContent = "Message sent.";
     } catch (error) {
       if (status) status.textContent = error instanceof Error ? error.message : "Message failed.";

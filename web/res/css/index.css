@@ -548,6 +548,51 @@ pre {
   margin: 8px 0;
 }
 
+.EasyMDEContainer {
+  color: var(--text);
+}
+
+.EasyMDEContainer .CodeMirror,
+.EasyMDEContainer .editor-preview,
+.EasyMDEContainer .editor-preview-side {
+  border-color: var(--line);
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+.EasyMDEContainer .CodeMirror {
+  border-radius: 6px;
+  caret-color: white;
+}
+
+.EasyMDEContainer .CodeMirror-cursor {
+  border-left-color: white;
+}
+
+.EasyMDEContainer .CodeMirror-selected {
+  background: rgba(139, 92, 246, 0.36);
+}
+
+.EasyMDEContainer .editor-toolbar {
+  border-color: var(--line);
+  border-radius: 6px 6px 0 0;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.EasyMDEContainer .editor-toolbar button {
+  color: var(--text) !important;
+}
+
+.EasyMDEContainer .editor-toolbar button:hover,
+.EasyMDEContainer .editor-toolbar button.active {
+  border-color: var(--line);
+  background: rgba(139, 92, 246, 0.22);
+}
+
+.EasyMDEContainer .editor-statusbar {
+  color: var(--muted);
+}
+
 .chat-thread {
   display: grid;
   max-height: 420px;

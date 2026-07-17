@@ -367,10 +367,10 @@ function sanitizeAttachment(input) {
   const name = sanitizeText(input.attachmentName || "", 180);
   if (!data) return null;
   if (data.length > maxJsonBytes) throw new PublicError("Attachment is too large.", 413);
-  if (!/^data:application\/pdf;base64,[a-z0-9+/=]+$/i.test(data)) {
-    throw new PublicError("Only PDF chat attachments are supported.", 400);
+  if (!/^data:(application\/pdf|image\/(png|jpeg|webp));base64,[a-z0-9+/=]+$/i.test(data)) {
+    throw new PublicError("Only PDF, PNG, JPEG, or WebP chat attachments are supported.", 400);
   }
-  return { name: name || "credstore-attachment.pdf", data };
+  return { name: name || "credstore-attachment", data };
 }
 
 function json(body, status = 200) {
