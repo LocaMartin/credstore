@@ -4,7 +4,7 @@
   <img src="./.res/text.svg" alt="CredStore">
 </div>
 
-<p align="center"><b>1.0.22</b></p>
+<p align="center"><b>1.0.23</b></p>
 
 CredStore is a strictly offline personal credential manager for desktop, web, and Android.
 
@@ -34,15 +34,19 @@ If install scripts are blocked, `credstore` still launches by caching Electron i
 Use `credstore -version` to print the installed version and `credstore -debug` to launch with debug logging and developer
 tools enabled.
 
-To remove the global npm launcher and local desktop vault data:
+CredStore clears old local desktop vault/authentication state during package installation so a fresh npm install starts
+from a clean local state on Linux, macOS, and Windows.
+
+To remove the global npm launcher:
 
 ```bash
-credstore --clean-uninstall --yes
 npm uninstall -g credstore
 ```
 
-Use `credstore --clean-vault --dry-run` first to preview the desktop data paths that will be removed. On Linux, do not
-use `npm uninstall -D credstore` for a global install; `-D` only targets a local project devDependency.
+Current npm versions do not reliably run package uninstall lifecycle scripts, so npm uninstall cannot be the only
+cleanup guarantee. CredStore therefore clears stale desktop vault/authentication state automatically on the next install.
+Windows NSIS builds also request app-data deletion during uninstall. Android clears its app sandbox on uninstall and has
+a restored-data guard on reinstall. iOS clears retained biometric keychain entries on first launch after reinstall.
 
 ### GitHub
 
@@ -79,7 +83,8 @@ https://credstore.en.uptodown.com/android
 - Website, API, database, and other categories.
 - Search and category filtering.
 - Post-login settings with multiple themes and master-key management.
-- Offline Sync button with client/receiver modes, chunked one-time QR generation, camera scanning, and paste fallback.
+- Offline Sync button with client/receiver modes, short QR/OTP pairing, Android/iOS Bluetooth transfer, and desktop
+  local Wi-Fi/LAN transfer.
 - Community sync for up to 5 devices, with signed offline enterprise licenses for larger teams.
 - Employee profile and role metadata foundation for enterprise visibility controls.
 - Android edge-to-edge layout and frameless Electron desktop windows to remove black bezel/titlebar space.
@@ -182,8 +187,8 @@ by the root `LICENSE`; closed-source Pro and Enterprise code is governed by `LIC
 To accommodate normal personal use while funding large-scale operational tools, the software enforces scale boundaries
 locally:
 
-- Community Edition (Free): Completely free local vault management and secure chunked QR-code synchronization for up to
-  5 local devices.
+- Community Edition (Free): Completely free local vault management and secure local device synchronization for up to
+  5 devices using short QR/OTP pairing plus encrypted local transport.
 - Enterprise Edition (Paid): Designed for businesses and collaborative privacy teams requiring structured profile
   management, employee/admin access metadata controls, and synchronization across larger hardware fleets.
 

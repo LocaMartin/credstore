@@ -2,6 +2,19 @@
 
 All notable changes to CredStore will be documented in this file.
 
+## [1.0.23] - 2026-07-17
+
+### Added
+
+- Added camera-based local Face unlock enrollment and login fallback for devices where the operating system does not
+  expose hardware-backed Face ID/face authentication to CredStore.
+- Enabled Face registration/login on Android, iOS, Linux, macOS, and Windows when a camera is available.
+
+### Changed
+
+- Fingerprint remains hardware-backed through the platform biometric/key-release bridge. Face now uses OS face auth where
+  available and falls back to a local camera face-template check when OS face auth is unavailable.
+
 ## [1.0.22] - 2026-07-16
 
 ### Fixed
@@ -14,6 +27,10 @@ All notable changes to CredStore will be documented in this file.
 - Added safer bottom padding and internal scrolling for sync and settings dialogs so Android navigation controls do not
   cover content.
 - Reduced mobile user-manual height and blocked horizontal scrolling in Settings and Enterprise panels.
+- Replaced vault-data QR sync with a short pairing QR/OTP flow. The QR now carries only pairing metadata; the encrypted
+  vault payload is sent through the local device transport and verified against the pairing checksum.
+- Added Electron desktop PC-to-PC local Wi-Fi/LAN sync using UDP receiver discovery and TCP encrypted payload transfer,
+  so desktops can sync without cameras or copy-pasting vault payloads.
 
 ## [1.0.21] - 2026-07-16
 

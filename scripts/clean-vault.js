@@ -7,7 +7,9 @@ const { spawnSync } = require("child_process")
 
 const args = new Set(process.argv.slice(2))
 const dryRun = args.has("--dry-run")
-const yes = args.has("--yes") || args.has("-y") || args.has("--npm-uninstall")
+const lifecycleInstall = args.has("--install")
+const quiet = args.has("--quiet")
+const yes = args.has("--yes") || args.has("-y") || args.has("--npm-uninstall") || lifecycleInstall
 const cleanMobile = args.has("--mobile")
 const cleanUninstall = args.has("--uninstall") || args.has("--clean-uninstall") || args.has("--npm-uninstall")
 
@@ -53,11 +55,13 @@ if (cleanMobile) {
 }
 
 const action = dryRun ? "Would remove" : "Removed"
-for (const target of removed) console.log(`${action}: ${target}`)
-for (const target of missing) console.log(`Not present: ${target}`)
+if (!quiet) {
+  for (const target of removed) console.log(`${action}: ${target}`)
+  for (const target of missing) console.log(`Not present: ${target}`)
+}
 for (const item of failed) console.error(`Failed: ${item}`)
 
-if (cleanUninstall) {
+if (cleanUninstall && !quiet) {
   console.log("Package uninstall is separate: run npm uninstall -g credstore after cleanup.")
 }
 
@@ -69,18 +73,33 @@ function collectTargets() {
   if (process.platform === "win32") {
     add(paths, process.env.APPDATA, "credstore")
     add(paths, process.env.APPDATA, "CredStore")
+    add(paths, process.env.APPDATA, "com.credstore.app")
     add(paths, process.env.LOCALAPPDATA, "credstore")
     add(paths, process.env.LOCALAPPDATA, "CredStore")
+    add(paths, process.env.LOCALAPPDATA, "com.credstore.app")
+    add(paths, process.env.LOCALAPPDATA, "CredStore", "User Data")
+    add(paths, process.env.LOCALAPPDATA, "credstore", "User Data")
   } else if (process.platform === "darwin") {
     add(paths, home, "Library", "Application Support", "credstore")
     add(paths, home, "Library", "Application Support", "CredStore")
+    add(paths, home, "Library", "Application Support", "com.credstore.app")
     add(paths, home, "Library", "Caches", "credstore")
     add(paths, home, "Library", "Caches", "CredStore")
+    add(paths, home, "Library", "Caches", "com.credstore.app")
+    add(paths, home, "Library", "HTTPStorages", "com.credstore.app")
+    add(paths, home, "Library", "WebKit", "com.credstore.app")
     add(paths, home, "Library", "Preferences", "com.credstore.app.plist")
+    add(paths, home, "Library", "Saved Application State", "com.credstore.app.savedState")
   } else {
     add(paths, process.env.XDG_CONFIG_HOME || path.join(home, ".config"), "credstore")
     add(paths, process.env.XDG_CONFIG_HOME || path.join(home, ".config"), "CredStore")
+    add(paths, process.env.XDG_CONFIG_HOME || path.join(home, ".config"), "com.credstore.app")
     add(paths, process.env.XDG_CACHE_HOME || path.join(home, ".cache"), "credstore")
+    add(paths, process.env.XDG_CACHE_HOME || path.join(home, ".cache"), "CredStore")
+    add(paths, process.env.XDG_CACHE_HOME || path.join(home, ".cache"), "com.credstore.app")
+    add(paths, process.env.XDG_DATA_HOME || path.join(home, ".local", "share"), "credstore")
+    add(paths, process.env.XDG_DATA_HOME || path.join(home, ".local", "share"), "CredStore")
+    add(paths, process.env.XDG_DATA_HOME || path.join(home, ".local", "share"), "com.credstore.app")
     add(paths, process.env.XDG_DATA_HOME || path.join(home, ".local", "share"), "applications", "credstore.desktop")
   }
 

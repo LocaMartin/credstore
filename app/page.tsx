@@ -77,7 +77,6 @@ import {
   Pencil,
   Plus,
   ShieldCheck,
-  Smartphone,
   Square,
   QrCode,
   ScanFace,
@@ -95,7 +94,7 @@ import commercialLicenseMarkdown from "@/LICENSE-PRO.md"
 import privacyTermsPricingMarkdown from "@/docs/legal/PRIVACY-TERMS-PRICING.md"
 import userManualMarkdown from "@/docs/USER-MANUAL.md"
 
-const APP_VERSION = "1.0.22"
+const APP_VERSION = "1.0.23"
 const MAX_UNLOCK_DELAY_MS = 30000
 const MAX_FAILED_UNLOCKS = 10
 const FREE_SYNC_DEVICE_LIMIT = 5
@@ -105,6 +104,7 @@ const CREDSTORE_DEEPLINK_SCHEME = "credstore"
 const RUNTIME_LOGO_PATH = "./logo.svg"
 const LICENSE_CLOCK_STORAGE_KEY = "credstore_license_last_seen_at"
 const SYNC_QR_PREFIX = "cs1."
+const SYNC_PAIRING_PREFIX = "csp1."
 const ADMIN_AUTH_LOCKOUT_MS = 30000
 const MAX_ADMIN_AUTH_FAILURES = 5
 
@@ -118,7 +118,43 @@ type CredStoreBiometricPlugin = {
   deleteSecret: (options: { slotId: string }) => Promise<void>
 }
 
+type CredStoreBluetoothDevice = {
+  id: string
+  name?: string
+  host?: string
+  port?: number
+  deviceId?: string
+}
+
+type CredStoreBluetoothPlugin = {
+  requestBluetoothPermissions: () => Promise<{ granted: boolean }>
+  isAvailable: () => Promise<{ available: boolean; code?: string; message?: string }>
+  listBondedDevices: () => Promise<{ devices: CredStoreBluetoothDevice[] }>
+  startReceiver: () => Promise<{ payload: string }>
+  sendPayload: (options: { deviceId: string; payload: string }) => Promise<void>
+  stopReceiver: () => Promise<void>
+}
+
+type CredStoreLocalSyncPlugin = {
+  isAvailable: () => Promise<{ available: boolean; code?: string; message?: string }>
+  discoverReceivers: (options: { otp: string }) => Promise<{ devices: CredStoreBluetoothDevice[] }>
+  startReceiver: (options: { otp: string; checksum?: string }) => Promise<{ payload: string; deviceName?: string; deviceId?: string }>
+  sendPayload: (options: { host: string; port: number; otp: string; checksum: string; payload: string }) => Promise<void>
+  stopReceiver: () => Promise<void>
+}
+
 const CredStoreBiometric = registerPlugin<CredStoreBiometricPlugin>("CredStoreBiometric")
+const CredStoreBluetooth = registerPlugin<CredStoreBluetoothPlugin>("CredStoreBluetooth")
+
+type FaceDetectorBox = { x: number; y: number; width: number; height: number }
+type FaceDetectorResult = { boundingBox?: FaceDetectorBox }
+type BrowserFaceDetector = {
+  detect: (source: HTMLVideoElement | HTMLCanvasElement) => Promise<FaceDetectorResult[]>
+}
+
+declare const FaceDetector:
+  | undefined
+  | (new (options?: { fastMode?: boolean; maxDetectedFaces?: number }) => BrowserFaceDetector)
 
 class QrRenderBoundary extends Component<{ children: ReactNode; onError: () => void }, { failed: boolean }> {
   state = { failed: false }
@@ -135,7 +171,7 @@ class QrRenderBoundary extends Component<{ children: ReactNode; onError: () => v
     if (this.state.failed) {
       return (
         <div className="grid min-h-[220px] place-items-center rounded-md border border-red-400/30 bg-red-950/10 p-4 text-sm text-red-900">
-          QR payload is too large for one QR. Use the one-time code instead.
+          Pairing QR could not render. Use the OTP and local transfer instead.
         </div>
       )
     }
@@ -278,6 +314,21 @@ type CredStoreSyncFrame = {
   chunk: string
 }
 
+type SyncPairingPayload = {
+  scheme: typeof CREDSTORE_DEEPLINK_SCHEME
+  type: "credstore-sync-pair"
+  version: 1
+  sessionId: string
+  otp: string
+  checksum: string
+  bytes: number
+  selectedCount: number
+  createdAt: string
+  deviceId?: string
+}
+
+type ExpectedSyncPairing = Pick<SyncPairingPayload, "sessionId" | "otp" | "checksum" | "createdAt" | "deviceId"> | null
+
 type CompactEncryptedPayload = {
   e: string
   i: string
@@ -324,6 +375,10 @@ declare global {
     }
     credstoreNative?: {
       biometric: CredStoreBiometricPlugin
+      bluetooth?: {
+        isAvailable: () => Promise<{ available: boolean; code?: string; message?: string }>
+      }
+      localSync?: CredStoreLocalSyncPlugin
     }
   }
 }
@@ -397,12 +452,84 @@ async function hashAdminPassword(password: string, salt = bytesToBase64Url(crypt
   }
 }
 
-function bufferToBase64Url(buffer: ArrayBuffer) {
-  return bytesToBase64Url(new Uint8Array(buffer))
+const base32Alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
+
+function bytesToBase32(bytes: Uint8Array) {
+  let bits = 0
+  let value = 0
+  let output = ""
+
+  for (const byte of Array.from(bytes)) {
+    value = (value << 8) | byte
+    bits += 8
+    while (bits >= 5) {
+      output += base32Alphabet[(value >>> (bits - 5)) & 31]
+      bits -= 5
+    }
+  }
+
+  if (bits > 0) output += base32Alphabet[(value << (5 - bits)) & 31]
+  return output
 }
 
-function credentialIdToBytes(value: string) {
-  return base64UrlToBytes(value)
+function base32ToBytes(value: string) {
+  const clean = value.replace(/=+$/g, "").replace(/\s+/g, "").toUpperCase()
+  let bits = 0
+  let buffer = 0
+  const output: number[] = []
+
+  for (const char of clean) {
+    const index = base32Alphabet.indexOf(char)
+    if (index < 0) throw new Error("Invalid authenticator secret")
+    buffer = (buffer << 5) | index
+    bits += 5
+    if (bits >= 8) {
+      output.push((buffer >>> (bits - 8)) & 255)
+      bits -= 8
+    }
+  }
+
+  return new Uint8Array(output)
+}
+
+function createTotpSecret() {
+  return bytesToBase32(crypto.getRandomValues(new Uint8Array(20)))
+}
+
+function createTotpUri(secret: string, accountIdentity: string) {
+  const label = encodeURIComponent(`CredStore:${accountIdentity.slice(0, 8) || "admin"}`)
+  const issuer = encodeURIComponent("CredStore")
+  return `otpauth://totp/${label}?secret=${secret}&issuer=${issuer}&algorithm=SHA1&digits=6&period=30`
+}
+
+async function generateTotp(secret: string, timestamp = Date.now()) {
+  const counter = Math.floor(timestamp / 30000)
+  const counterBytes = new ArrayBuffer(8)
+  const view = new DataView(counterBytes)
+  view.setUint32(4, counter)
+
+  const key = await crypto.subtle.importKey("raw", base32ToBytes(secret), { name: "HMAC", hash: "SHA-1" }, false, ["sign"])
+  const hmac = new Uint8Array(await crypto.subtle.sign("HMAC", key, counterBytes))
+  const offset = hmac[hmac.length - 1] & 15
+  const code =
+    (((hmac[offset] & 0x7f) << 24) |
+      ((hmac[offset + 1] & 0xff) << 16) |
+      ((hmac[offset + 2] & 0xff) << 8) |
+      (hmac[offset + 3] & 0xff)) %
+    1000000
+
+  return code.toString().padStart(6, "0")
+}
+
+async function verifyTotp(secret: string, code: string) {
+  const clean = code.replace(/\D/g, "")
+  if (clean.length !== 6) return false
+  const now = Date.now()
+  const windows = [-30000, 0, 30000]
+  for (const offset of windows) {
+    if ((await generateTotp(secret, now + offset)) === clean) return true
+  }
+  return false
 }
 
 function compactEncryptedPayload(payload: EncryptedPayload): CompactEncryptedPayload {
@@ -475,6 +602,45 @@ function createSyncPayload(vault: VaultRecord) {
   }
 
   return `${SYNC_QR_PREFIX}${bytesToBase64Url(gzipSync(strToU8(JSON.stringify(compactPayload))))}`
+}
+
+function createSyncPairingPayload(payload: string, selectedCount: number, deviceId?: string) {
+  const otp = checksumText(payload).slice(0, 8).toUpperCase()
+  const pairing: SyncPairingPayload = {
+    scheme: CREDSTORE_DEEPLINK_SCHEME,
+    type: "credstore-sync-pair",
+    version: 1,
+    sessionId: createId(),
+    otp,
+    checksum: checksumText(payload),
+    bytes: payload.length,
+    selectedCount,
+    createdAt: new Date().toISOString(),
+    ...(deviceId ? { deviceId } : {}),
+  }
+
+  return {
+    code: otp,
+    pairing,
+    qrValue: `${SYNC_PAIRING_PREFIX}${encodePayload(pairing)}`,
+  }
+}
+
+function decodeSyncPairingPayload(value: string): SyncPairingPayload {
+  if (!value.startsWith(SYNC_PAIRING_PREFIX)) throw new Error("Invalid pairing QR")
+  const pairing = decodePayload<SyncPairingPayload>(value.slice(SYNC_PAIRING_PREFIX.length))
+  if (
+    pairing.scheme !== CREDSTORE_DEEPLINK_SCHEME ||
+    pairing.type !== "credstore-sync-pair" ||
+    pairing.version !== 1 ||
+    !pairing.sessionId ||
+    !pairing.otp ||
+    !pairing.checksum
+  ) {
+    throw new Error("Invalid pairing QR")
+  }
+
+  return pairing
 }
 
 function decodeSyncPayload(value: string): VaultRecord {
@@ -598,7 +764,11 @@ function biometricLabelForResult(result: BiometricAvailability) {
 }
 
 function biometricTypeAllowed(type: "fingerprint" | "face", result: BiometricAvailability) {
+  if (type === "face" && hasCameraFaceSupport()) return true
   if (!result.available) return false
+  if (Capacitor.isNativePlatform() && Capacitor.getPlatform() === "android") {
+    return type === "fingerprint"
+  }
   if (result.biometryType === BiometryType.MULTIPLE || result.biometryType === undefined) return true
   if (type === "face") return result.biometryType === BiometryType.FACE_ID || result.biometryType === BiometryType.FACE_AUTHENTICATION
   return result.biometryType === BiometryType.FINGERPRINT || result.biometryType === BiometryType.TOUCH_ID
@@ -606,6 +776,10 @@ function biometricTypeAllowed(type: "fingerprint" | "face", result: BiometricAva
 
 function isAndroidNativePlatform() {
   return Capacitor.isNativePlatform() && Capacitor.getPlatform() === "android"
+}
+
+function hasCameraFaceSupport() {
+  return typeof navigator !== "undefined" && Boolean(navigator.mediaDevices?.getUserMedia)
 }
 
 async function getBiometricAvailability(): Promise<BiometricAvailability> {
@@ -659,6 +833,194 @@ async function getBiometricAvailability(): Promise<BiometricAvailability> {
   return { available: false, code: "PLUGIN_UNAVAILABLE", message: "Native biometric support is unavailable in this build." }
 }
 
+async function deriveCameraFaceKey(template: string) {
+  const keyMaterial = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(`CredStore camera face:${template}`),
+    "PBKDF2",
+    false,
+    ["deriveKey"],
+  )
+  return crypto.subtle.deriveKey(
+    {
+      name: "PBKDF2",
+      salt: new TextEncoder().encode("CredStore camera face unlock v1"),
+      iterations: 210000,
+      hash: "SHA-256",
+    },
+    keyMaterial,
+    { name: "AES-GCM", length: 256 },
+    false,
+    ["encrypt", "decrypt"],
+  )
+}
+
+async function createCameraFaceSecret(secret: string): Promise<BiometricKey> {
+  const template = await captureCameraFaceTemplate("Register Face")
+  const key = await deriveCameraFaceKey(template.hash)
+  const iv = crypto.getRandomValues(new Uint8Array(12))
+  const encrypted = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, new TextEncoder().encode(secret)))
+  return {
+    platform: "camera-face",
+    encrypted: bytesToBase64Url(encrypted),
+    iv: encodePayload({
+      template: template.hash,
+      iv: bytesToBase64Url(iv),
+      threshold: template.threshold,
+      createdAt: new Date().toISOString(),
+    }),
+  }
+}
+
+async function getCameraFaceSecret(biometricKey: BiometricKey): Promise<string> {
+  const metadata = decodePayload<{ template?: string; iv?: string; threshold?: number }>(biometricKey.iv)
+  if (!metadata.template || !metadata.iv) throw new Error("Camera face key is invalid. Register Face again.")
+
+  const current = await captureCameraFaceTemplate("Scan Face")
+  const distance = hammingDistance(metadata.template, current.hash)
+  const threshold = metadata.threshold ?? current.threshold
+  if (distance > threshold) {
+    throw new Error("Face was not recognized. Improve lighting, center your face, and try again.")
+  }
+
+  const key = await deriveCameraFaceKey(metadata.template)
+  const decrypted = await crypto.subtle.decrypt(
+    { name: "AES-GCM", iv: base64UrlToBytes(metadata.iv) },
+    key,
+    base64UrlToBytes(biometricKey.encrypted),
+  )
+  return new TextDecoder().decode(decrypted)
+}
+
+async function captureCameraFaceTemplate(title: string): Promise<{ hash: string; threshold: number }> {
+  if (!hasCameraFaceSupport()) throw new Error("Camera access is unavailable on this device.")
+
+  const stream = await navigator.mediaDevices.getUserMedia({
+    video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } },
+    audio: false,
+  })
+
+  const overlay = document.createElement("div")
+  overlay.className = "fixed inset-0 z-[90] grid place-items-center bg-black/80 p-4 backdrop-blur-sm"
+  overlay.innerHTML = `
+    <div class="w-full max-w-sm rounded-lg border border-white/15 bg-slate-950/95 p-4 text-center text-white shadow-2xl">
+      <div class="mb-3">
+        <h2 class="text-xl font-bold">${title}</h2>
+        <p class="mt-1 text-sm text-slate-300">Center your face in the frame. CredStore stores a local camera template only.</p>
+      </div>
+      <div class="relative overflow-hidden rounded-lg border border-cyan-300/30 bg-black">
+        <video autoplay muted playsinline class="h-72 w-full object-cover"></video>
+        <div class="pointer-events-none absolute inset-8 rounded-[42%] border-2 border-cyan-300/80 shadow-[0_0_40px_rgba(34,211,238,0.45)]"></div>
+        <div class="pointer-events-none absolute left-6 right-6 top-1/2 h-0.5 -translate-y-1/2 animate-pulse bg-cyan-300 shadow-[0_0_22px_rgba(103,232,249,0.9)]"></div>
+      </div>
+      <p class="mt-3 text-xs text-slate-300">Scanning face locally...</p>
+    </div>
+  `
+  document.body.appendChild(overlay)
+  const video = overlay.querySelector("video") as HTMLVideoElement
+  video.srcObject = stream
+
+  try {
+    await new Promise<void>((resolve, reject) => {
+      video.onloadedmetadata = () => {
+        video.play().then(() => resolve()).catch(reject)
+      }
+      video.onerror = () => reject(new Error("Camera preview failed."))
+    })
+    await new Promise((resolve) => window.setTimeout(resolve, 900))
+
+    const canvas = document.createElement("canvas")
+    canvas.width = 160
+    canvas.height = 160
+    const context = canvas.getContext("2d", { willReadFrequently: true })
+    if (!context) throw new Error("Camera template generation failed.")
+
+    let sourceBox: FaceDetectorBox | null = null
+    if (typeof FaceDetector !== "undefined") {
+      try {
+        const detector = new FaceDetector({ fastMode: true, maxDetectedFaces: 1 })
+        const faces = await detector.detect(video)
+        sourceBox = faces[0]?.boundingBox || null
+      } catch {
+        sourceBox = null
+      }
+    }
+
+    const videoWidth = video.videoWidth || 640
+    const videoHeight = video.videoHeight || 480
+    const fallbackSize = Math.min(videoWidth, videoHeight) * 0.68
+    const box = sourceBox || {
+      x: (videoWidth - fallbackSize) / 2,
+      y: (videoHeight - fallbackSize) / 2,
+      width: fallbackSize,
+      height: fallbackSize,
+    }
+    const padding = Math.min(box.width, box.height) * 0.22
+    const sx = Math.max(0, box.x - padding)
+    const sy = Math.max(0, box.y - padding)
+    const sw = Math.min(videoWidth - sx, box.width + padding * 2)
+    const sh = Math.min(videoHeight - sy, box.height + padding * 2)
+    context.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height)
+    const hash = perceptualHash(context.getImageData(0, 0, canvas.width, canvas.height))
+    return { hash, threshold: 54 }
+  } finally {
+    stream.getTracks().forEach((track) => track.stop())
+    overlay.remove()
+  }
+}
+
+function perceptualHash(image: ImageData) {
+  const cells = 16
+  const cellWidth = image.width / cells
+  const cellHeight = image.height / cells
+  const values: number[] = []
+
+  for (let y = 0; y < cells; y += 1) {
+    for (let x = 0; x < cells; x += 1) {
+      let total = 0
+      let count = 0
+      const startX = Math.floor(x * cellWidth)
+      const endX = Math.floor((x + 1) * cellWidth)
+      const startY = Math.floor(y * cellHeight)
+      const endY = Math.floor((y + 1) * cellHeight)
+      for (let py = startY; py < endY; py += 1) {
+        for (let px = startX; px < endX; px += 1) {
+          const index = (py * image.width + px) * 4
+          total += image.data[index] * 0.299 + image.data[index + 1] * 0.587 + image.data[index + 2] * 0.114
+          count += 1
+        }
+      }
+      values.push(total / Math.max(1, count))
+    }
+  }
+
+  const sorted = [...values].sort((a, b) => a - b)
+  const median = sorted[Math.floor(sorted.length / 2)] || 0
+  let bits = ""
+  for (const value of values) bits += value >= median ? "1" : "0"
+
+  let hex = ""
+  for (let index = 0; index < bits.length; index += 4) {
+    hex += Number.parseInt(bits.slice(index, index + 4), 2).toString(16)
+  }
+  return hex
+}
+
+function hammingDistance(left: string, right: string) {
+  const length = Math.min(left.length, right.length)
+  let distance = Math.abs(left.length - right.length) * 4
+  for (let index = 0; index < length; index += 1) {
+    const a = Number.parseInt(left[index], 16)
+    const b = Number.parseInt(right[index], 16)
+    let xor = a ^ b
+    while (xor) {
+      distance += xor & 1
+      xor >>= 1
+    }
+  }
+  return distance
+}
+
 async function createBiometricSecret(slotId: string, secret: string): Promise<BiometricKey> {
   if (Capacitor.isNativePlatform()) {
     if (isAndroidNativePlatform()) {
@@ -691,6 +1053,10 @@ async function createBiometricSecret(slotId: string, secret: string): Promise<Bi
 }
 
 async function getBiometricSecret(slotId: string, biometricKey: BiometricKey): Promise<string> {
+  if (biometricKey.platform === "camera-face") {
+    return getCameraFaceSecret(biometricKey)
+  }
+
   if (biometricKey.platform === "electron-safe-storage") {
     if (!window.credstoreNative?.biometric) throw new Error("Desktop biometric bridge unavailable")
     const result = await window.credstoreNative.biometric.getSecret({
@@ -1086,7 +1452,12 @@ export default function CredStore() {
   const [syncCode, setSyncCode] = useState("")
   const [syncMode, setSyncMode] = useState<"client" | "receiver">("client")
   const [syncPayload, setSyncPayload] = useState("")
-  const [manualSyncCode, setManualSyncCode] = useState("")
+  const [syncPairingQr, setSyncPairingQr] = useState("")
+  const [expectedSyncPairing, setExpectedSyncPairing] = useState<ExpectedSyncPairing>(null)
+  const [bluetoothDevices, setBluetoothDevices] = useState<CredStoreBluetoothDevice[]>([])
+  const [bluetoothMessage, setBluetoothMessage] = useState("")
+  const [isBluetoothReceiving, setIsBluetoothReceiving] = useState(false)
+  const [syncOtpInput, setSyncOtpInput] = useState("")
   const [syncMessage, setSyncMessage] = useState("")
   const [vaultData, setVaultData] = useState<VaultData>(normalizeVaultData(null))
   const [licenseToken, setLicenseToken] = useState("")
@@ -1100,6 +1471,8 @@ export default function CredStore() {
   const [adminPassword, setAdminPassword] = useState("")
   const [adminAuthenticated, setAdminAuthenticated] = useState(false)
   const [adminAuthMessage, setAdminAuthMessage] = useState("")
+  const [adminAuthenticatorSecret, setAdminAuthenticatorSecret] = useState("")
+  const [adminAuthenticatorCode, setAdminAuthenticatorCode] = useState("")
   const [unlockDelayUntil, setUnlockDelayUntil] = useState(0)
   const [failedUnlocks, setFailedUnlocks] = useState(0)
   const [biometricMessage, setBiometricMessage] = useState("")
@@ -1119,7 +1492,7 @@ export default function CredStore() {
   const biometricAvailable = biometricAvailability.available
   const nativeBiometricLabel = biometricLabelForResult(biometricAvailability)
   const canUseFingerprint = biometricTypeAllowed("fingerprint", biometricAvailability)
-  const canUseFace = biometricTypeAllowed("face", biometricAvailability)
+  const canUseFace = hasCameraFaceSupport() || biometricTypeAllowed("face", biometricAvailability)
   const savedFingerprintSlot = useMemo(
     () => vaultRecord?.keySlots.find((slot) => slot.enabled && slot.type === "fingerprint" && slot.biometricKey) || null,
     [vaultRecord],
@@ -1129,8 +1502,10 @@ export default function CredStore() {
     [vaultRecord],
   )
   const biometricRegistrationHint = biometricAvailable
-    ? "Biometric hardware is available. Register Fingerprint or Face below to enable biometric login."
-    : describeBiometricAvailability(biometricAvailability)
+    ? "Fingerprint uses the operating system. Face uses a local camera enrollment when hardware Face ID is unavailable."
+    : hasCameraFaceSupport()
+      ? "Face unlock is available through the camera. Fingerprint requires supported biometric hardware."
+      : describeBiometricAvailability(biometricAvailability)
   const maxSyncDevices = activeLicense?.maxDevices || FREE_SYNC_DEVICE_LIMIT
   const syncDeviceCount = vaultData.metadata?.syncedDevices.length || 1
   const syncLimitLabel = activeLicense
@@ -1148,6 +1523,9 @@ export default function CredStore() {
     credentials.find((credential) => credential.id === selectedVisibilityCredentialId) || credentials[0] || null
   const adminAuthLockoutRemaining = Math.max(0, (vaultData.adminAuth?.lockoutUntil || 0) - Date.now())
   const isAdminAuthLocked = adminAuthLockoutRemaining > 0
+  const adminAuthenticatorUri = adminAuthenticatorSecret
+    ? createTotpUri(adminAuthenticatorSecret, vaultData.metadata?.accountIdentity || "admin")
+    : ""
   const selectedCount = selectedCredentialIds.size
 
   const persistVault = useCallback(
@@ -1455,7 +1833,7 @@ export default function CredStore() {
     async (type: "fingerprint" | "face") => {
       const target = type === "fingerprint" ? "login-fingerprint" : "login-face"
       const label = type === "face" ? "Face" : nativeBiometricLabel
-      if (!biometricAvailable) {
+      if (type !== "face" && !biometricAvailable) {
         setBiometricMessage(describeBiometricAvailability(biometricAvailability))
         setBiometricUi({ target: null, phase: "idle" })
         return
@@ -1482,7 +1860,9 @@ export default function CredStore() {
           return
         }
 
-        setBiometricUi({ target, phase: "running", mode: "login", label })
+        if (type !== "face" || slot.biometricKey.platform !== "camera-face") {
+          setBiometricUi({ target, phase: "running", mode: "login", label })
+        }
         const secret = await getBiometricSecret(slot.id, slot.biometricKey)
 
         await unlockWithVaultKey(storedVault, base64ToBytes(secret))
@@ -1689,7 +2069,7 @@ export default function CredStore() {
       const displayLabel = type === "face" ? "Face" : nativeBiometricLabel
       const label = `${displayLabel} master key`
 
-      if (!biometricAvailable) {
+      if (type !== "face" && !biometricAvailable) {
         setBiometricMessage(describeBiometricAvailability(biometricAvailability))
         setBiometricUi({ target: null, phase: "idle" })
         return
@@ -1701,8 +2081,11 @@ export default function CredStore() {
       }
 
       try {
-        setBiometricUi({ target, phase: "running", mode: "register", label: displayLabel })
-        const biometricKey = await createBiometricSecret(slotId, bytesToBase64(vaultKey))
+        if (type !== "face") {
+          setBiometricUi({ target, phase: "running", mode: "register", label: displayLabel })
+        }
+        const biometricKey =
+          type === "face" ? await createCameraFaceSecret(bytesToBase64(vaultKey)) : await createBiometricSecret(slotId, bytesToBase64(vaultKey))
         const nextRecord: VaultRecord = {
           ...vaultRecord,
           keySlots: [
@@ -1775,21 +2158,29 @@ export default function CredStore() {
     }
 
     const nextSyncPayload = createSyncPayload(sourceRecord)
+    const pairing = createSyncPairingPayload(
+      nextSyncPayload,
+      selectedCredentialIds.size,
+      vaultData.metadata?.deviceId || installationId,
+    )
     setSyncPayload(nextSyncPayload)
-    setSyncCode(checksumText(nextSyncPayload).slice(0, 8).toUpperCase())
+    setSyncPairingQr(pairing.qrValue)
+    setSyncCode(pairing.code)
+    setBluetoothDevices([])
+    setBluetoothMessage("")
     setSyncMessage(
       selectedCredentialIds.size > 0
-        ? `One-time QR/code generated for ${selectedCredentialIds.size} selected item(s).`
-        : "One-time QR/code generated. Scan it or copy the code to the receiver.",
+        ? `Pairing QR generated for ${selectedCredentialIds.size} selected item(s). Start the receiver and send over local transport.`
+        : "Pairing QR generated. Start the receiver and send the encrypted payload over LAN/Bluetooth local transport.",
     )
-  }, [maxSyncDevices, selectedCredentialIds, vaultData, vaultKey, vaultRecord])
+  }, [installationId, maxSyncDevices, selectedCredentialIds, vaultData, vaultKey, vaultRecord])
 
   useEffect(() => {
-    if (!isSyncOpen || syncMode !== "client" || syncPayload) return
+    if (!isSyncOpen || syncMode !== "client" || syncPairingQr) return
     createSyncCode().catch((error: Error) => {
       setSyncMessage(error.message || "Sync QR generation failed.")
     })
-  }, [createSyncCode, isSyncOpen, syncMode, syncPayload])
+  }, [createSyncCode, isSyncOpen, syncMode, syncPairingQr])
 
   const importSyncPayload = useCallback(
     async (payload: string) => {
@@ -1820,13 +2211,44 @@ export default function CredStore() {
             deviceName: incomingVaultData.metadata?.syncedDevices[0]?.label || "Synced device",
             deviceId: incomingVaultData.metadata?.deviceId || "unknown",
           })
-          setManualSyncCode("")
+          setSyncOtpInput("")
           setSyncMessage(frameMessage)
         }
 
+        const assertOtp = (payloadToVerify: string) => {
+          const enteredOtp = syncOtpInput.trim().replace(/\s+/g, "").toUpperCase()
+          if (expectedSyncPairing && checksumText(payloadToVerify) !== expectedSyncPairing.checksum) {
+            throw new Error("Pairing mismatch. Scan the current client QR before receiving the payload.")
+          }
+
+          if (!enteredOtp && !expectedSyncPairing) return
+
+          const actualOtp = checksumText(payloadToVerify).slice(0, 8).toUpperCase()
+          const expectedOtp = expectedSyncPairing?.otp || enteredOtp
+          if (expectedOtp !== actualOtp) throw new Error("OTP mismatch. Generate a fresh pairing QR and try again.")
+        }
+
+        if (trimmed.startsWith(SYNC_PAIRING_PREFIX)) {
+          const pairing = decodeSyncPairingPayload(trimmed)
+          setExpectedSyncPairing({
+            sessionId: pairing.sessionId,
+            otp: pairing.otp,
+            checksum: pairing.checksum,
+            createdAt: pairing.createdAt,
+            ...(pairing.deviceId ? { deviceId: pairing.deviceId } : {}),
+          })
+          setSyncOtpInput(pairing.otp)
+          setSyncMessage(
+            `Paired with client ${pairing.deviceId || pairing.sessionId}. Waiting for encrypted Bluetooth/local payload.`,
+          )
+          return
+        }
+
         if (trimmed.startsWith(SYNC_QR_PREFIX)) {
+          assertOtp(trimmed)
           const vault = decodeSyncPayload(trimmed)
-          await importVault(vault, "Sync complete. Data was merged without erasing this device.")
+          setExpectedSyncPairing(null)
+          await importVault(vault, "Sync complete. Pairing verified and data was merged without erasing this device.")
           return
         }
 
@@ -1855,19 +2277,23 @@ export default function CredStore() {
           const ordered = frames.slice(0, parsed.total)
           const assembled = ordered.map((frame) => frame?.chunk || "").join("")
           if (checksumText(assembled) !== parsed.checksum) throw new Error("Checksum mismatch")
+          assertOtp(assembled)
 
           const vault = decodeSyncPayload(assembled)
-          await importVault(vault, "All QR frames imported. Data was merged without erasing this device.")
+          setExpectedSyncPairing(null)
+          await importVault(vault, "All frames imported. Pairing verified and data was merged without erasing this device.")
           return
         }
 
+        assertOtp(trimmed)
         const vault = decodeSyncPayload(trimmed)
-        await importVault(vault, "Sync complete. Data was merged without erasing this device.")
+        setExpectedSyncPairing(null)
+        await importVault(vault, "Sync complete. Pairing verified and data was merged without erasing this device.")
       } catch (error) {
         setSyncMessage(error instanceof Error ? error.message : "Invalid, incomplete, or unreadable sync QR frame.")
       }
     },
-    [vaultKey, vaultRecord],
+    [expectedSyncPairing, syncOtpInput, vaultKey, vaultRecord],
   )
 
   const scanSyncQr = useCallback(async () => {
@@ -1884,6 +2310,133 @@ export default function CredStore() {
       setSyncMessage(error instanceof Error ? error.message : "Camera QR scanning failed.")
     }
   }, [importSyncPayload])
+
+  const loadBluetoothReceivers = useCallback(async () => {
+    try {
+      if (!syncCode) throw new Error("Generate a pairing QR/OTP first.")
+
+      if (!Capacitor.isNativePlatform() && window.credstoreNative?.localSync) {
+        setBluetoothMessage("Looking for desktop receivers on the local network...")
+        const availability = await window.credstoreNative.localSync.isAvailable()
+        if (!availability.available) throw new Error(availability.message || "Desktop local sync is not available.")
+        const result = await window.credstoreNative.localSync.discoverReceivers({ otp: syncCode })
+        setBluetoothDevices(result.devices || [])
+        setBluetoothMessage(
+          result.devices?.length
+            ? "Pick the desktop receiver that is waiting with this OTP."
+            : "No desktop receivers found. Start the receiver with this OTP and try again.",
+        )
+        return
+      }
+
+      if (!Capacitor.isNativePlatform()) {
+        throw new Error("Desktop local sync is available only in the Electron app, not in a regular browser.")
+      }
+
+      setBluetoothMessage("Looking for local CredStore receivers...")
+      const permissions = await CredStoreBluetooth.requestBluetoothPermissions()
+      if (!permissions.granted) throw new Error("Bluetooth permission was not granted.")
+
+      const availability = await CredStoreBluetooth.isAvailable()
+      if (!availability.available) throw new Error(availability.message || "Bluetooth is not available.")
+
+      const result = await CredStoreBluetooth.listBondedDevices()
+      setBluetoothDevices(result.devices || [])
+      setBluetoothMessage(
+        result.devices?.length
+          ? "Pick the receiver that has scanned this pairing QR."
+          : "No CredStore receivers found. Start receiver mode on the other device and try again.",
+      )
+    } catch (error) {
+      setBluetoothDevices([])
+      setBluetoothMessage(error instanceof Error ? error.message : "Bluetooth receiver discovery failed.")
+    }
+  }, [])
+
+  const sendBluetoothSyncPayload = useCallback(
+    async (device: CredStoreBluetoothDevice) => {
+      try {
+        if (!syncPayload || !syncPairingQr) throw new Error("Generate a pairing QR first.")
+
+        if (!Capacitor.isNativePlatform() && window.credstoreNative?.localSync) {
+          if (!device.host || !device.port) throw new Error("Desktop receiver address is missing.")
+          setBluetoothMessage(`Sending encrypted payload to ${device.name || device.id} over local Wi-Fi...`)
+          await window.credstoreNative.localSync.sendPayload({
+            host: device.host,
+            port: device.port,
+            otp: syncCode,
+            checksum: checksumText(syncPayload),
+            payload: syncPayload,
+          })
+          setBluetoothMessage(`Encrypted payload sent to ${device.name || device.id}.`)
+          return
+        }
+
+        setBluetoothMessage(`Sending encrypted payload to ${device.name || device.id} over Bluetooth...`)
+        await CredStoreBluetooth.sendPayload({ deviceId: device.id, payload: syncPayload })
+        setBluetoothMessage(`Encrypted payload sent to ${device.name || device.id}.`)
+      } catch (error) {
+        setBluetoothMessage(error instanceof Error ? error.message : "Local payload send failed.")
+      }
+    },
+    [syncCode, syncPairingQr, syncPayload],
+  )
+
+  const startBluetoothSyncReceiver = useCallback(async () => {
+    try {
+      if (!expectedSyncPairing && !syncOtpInput.trim()) {
+        throw new Error("Scan the client's short pairing QR or enter the OTP before starting the payload receiver.")
+      }
+      const otp = expectedSyncPairing?.otp || syncOtpInput.trim().replace(/\s+/g, "").toUpperCase()
+      const checksum = expectedSyncPairing?.checksum
+
+      if (!Capacitor.isNativePlatform() && window.credstoreNative?.localSync) {
+        setIsBluetoothReceiving(true)
+        setBluetoothMessage("Waiting for encrypted local Wi-Fi payload...")
+        const availability = await window.credstoreNative.localSync.isAvailable()
+        if (!availability.available) throw new Error(availability.message || "Desktop local sync is not available.")
+        const result = await window.credstoreNative.localSync.startReceiver({ otp, ...(checksum ? { checksum } : {}) })
+        await importSyncPayload(result.payload)
+        setBluetoothMessage(`Encrypted payload received from ${result.deviceName || result.deviceId || "desktop client"}.`)
+        return
+      }
+
+      if (!Capacitor.isNativePlatform()) {
+        throw new Error("Desktop local sync is available only in the Electron app, not in a regular browser.")
+      }
+
+      setIsBluetoothReceiving(true)
+      setBluetoothMessage("Waiting for encrypted Bluetooth payload...")
+      const permissions = await CredStoreBluetooth.requestBluetoothPermissions()
+      if (!permissions.granted) throw new Error("Bluetooth permission was not granted.")
+
+      const availability = await CredStoreBluetooth.isAvailable()
+      if (!availability.available) throw new Error(availability.message || "Bluetooth is not available.")
+
+      const result = await CredStoreBluetooth.startReceiver()
+      await importSyncPayload(result.payload)
+      setBluetoothMessage("Encrypted payload received.")
+    } catch (error) {
+      setBluetoothMessage(error instanceof Error ? error.message : "Local payload receive failed.")
+    } finally {
+      setIsBluetoothReceiving(false)
+    }
+  }, [expectedSyncPairing, importSyncPayload, syncOtpInput])
+
+  const stopBluetoothSyncReceiver = useCallback(async () => {
+    try {
+      if (!Capacitor.isNativePlatform() && window.credstoreNative?.localSync) {
+        await window.credstoreNative.localSync.stopReceiver()
+      } else {
+        await CredStoreBluetooth.stopReceiver()
+      }
+      setBluetoothMessage("Local payload receiver stopped.")
+    } catch (error) {
+      setBluetoothMessage(error instanceof Error ? error.message : "Unable to stop Bluetooth receiver.")
+    } finally {
+      setIsBluetoothReceiving(false)
+    }
+  }, [])
 
   const verifyLicenseToken = useCallback(async (token: string): Promise<LicenseRecord> => {
     await assertMonotonicLicenseClock()
@@ -2012,74 +2565,66 @@ export default function CredStore() {
     )
   }, [adminPassword, setEnterpriseAdminPassword, updateAdminAuth, vaultData.adminAuth])
 
-  const registerAdminPasskey = useCallback(async () => {
-    if (!vaultRecord || !vaultKey || typeof navigator === "undefined" || !navigator.credentials?.create) {
-      setAdminAuthMessage("Passkey registration is unavailable on this platform.")
+  const startAdminAuthenticatorSetup = useCallback(() => {
+    setAdminAuthenticatorSecret(createTotpSecret())
+    setAdminAuthenticatorCode("")
+    setAdminAuthMessage("Scan the QR in an authenticator app, then enter the 6-digit code to enable offline admin login.")
+  }, [])
+
+  const confirmAdminAuthenticatorSetup = useCallback(async () => {
+    if (!adminAuthenticatorSecret) {
+      setAdminAuthMessage("Generate an authenticator QR first.")
       return
     }
 
-    try {
-      const credential = (await navigator.credentials.create({
-        publicKey: {
-          challenge: crypto.getRandomValues(new Uint8Array(32)),
-          rp: { name: "CredStore" },
-          user: {
-            id: crypto.getRandomValues(new Uint8Array(16)),
-            name: "credstore-admin",
-            displayName: "CredStore Admin",
-          },
-          pubKeyCredParams: [
-            { type: "public-key", alg: -7 },
-            { type: "public-key", alg: -257 },
-          ],
-          authenticatorSelection: {
-            residentKey: "preferred",
-            userVerification: "required",
-          },
-          timeout: 60000,
-          attestation: "none",
-        },
-      })) as PublicKeyCredential | null
-
-      if (!credential) throw new Error("Passkey registration was cancelled.")
-      await updateAdminAuth({
-        ...(vaultData.adminAuth || { updatedAt: new Date().toISOString() }),
-        passkeyCredentialId: bufferToBase64Url(credential.rawId),
-        failedAttempts: 0,
-        lockoutUntil: 0,
-        updatedAt: new Date().toISOString(),
-      })
-      setAdminAuthenticated(true)
-      setAdminAuthMessage("Admin passkey registered. Microsoft Authenticator or phone passkeys work when your OS/browser exposes them.")
-    } catch (error) {
-      setAdminAuthMessage(error instanceof Error ? error.message : "Passkey registration failed.")
-    }
-  }, [updateAdminAuth, vaultData.adminAuth, vaultKey, vaultRecord])
-
-  const authenticateAdminPasskey = useCallback(async () => {
-    const credentialId = vaultData.adminAuth?.passkeyCredentialId
-    if (!credentialId || typeof navigator === "undefined" || !navigator.credentials?.get) {
-      setAdminAuthMessage("No admin passkey is registered on this vault.")
+    if (!(await verifyTotp(adminAuthenticatorSecret, adminAuthenticatorCode))) {
+      setAdminAuthMessage("Authenticator code is invalid. Check the device clock and try again.")
       return
     }
 
-    try {
-      const assertion = await navigator.credentials.get({
-        publicKey: {
-          challenge: crypto.getRandomValues(new Uint8Array(32)),
-          allowCredentials: [{ id: credentialIdToBytes(credentialId), type: "public-key" }],
-          userVerification: "required",
-          timeout: 60000,
-        },
-      })
+    await updateAdminAuth({
+      ...(vaultData.adminAuth || { updatedAt: new Date().toISOString() }),
+      otpSecret: adminAuthenticatorSecret,
+      failedAttempts: 0,
+      lockoutUntil: 0,
+      updatedAt: new Date().toISOString(),
+    })
+    setAdminAuthenticated(true)
+    setAdminAuthenticatorSecret("")
+    setAdminAuthenticatorCode("")
+    setAdminAuthMessage("Offline authenticator enabled and admin authenticated.")
+  }, [adminAuthenticatorCode, adminAuthenticatorSecret, updateAdminAuth, vaultData.adminAuth])
 
-      if (!assertion) throw new Error("Passkey authentication was cancelled.")
-      setAdminAuthenticated(true)
-      setAdminAuthMessage("Admin passkey accepted.")
-    } catch (error) {
-      setAdminAuthMessage(error instanceof Error ? error.message : "Passkey authentication failed.")
+  const authenticateAdminAuthenticator = useCallback(async () => {
+    const auth = vaultData.adminAuth
+    if (!auth?.otpSecret) {
+      setAdminAuthMessage("No offline authenticator is registered.")
+      return
     }
-  }, [vaultData.adminAuth?.passkeyCredentialId])
+
+    if (Date.now() < (auth.lockoutUntil || 0)) {
+      setAdminAuthMessage("Admin authentication is temporarily locked. Wait and try again.")
+      return
+    }
+
+    if (await verifyTotp(auth.otpSecret, adminAuthenticatorCode)) {
+      await updateAdminAuth({ ...auth, failedAttempts: 0, lockoutUntil: 0, updatedAt: new Date().toISOString() })
+      setAdminAuthenticated(true)
+      setAdminAuthenticatorCode("")
+      setAdminAuthMessage("Offline authenticator accepted.")
+      return
+    }
+
+    const failedAttempts = (auth.failedAttempts || 0) + 1
+    const lockoutUntil = failedAttempts >= MAX_ADMIN_AUTH_FAILURES ? Date.now() + ADMIN_AUTH_LOCKOUT_MS : 0
+    await updateAdminAuth({ ...auth, failedAttempts, lockoutUntil, updatedAt: new Date().toISOString() })
+    setAdminAuthenticated(false)
+    setAdminAuthMessage(
+      lockoutUntil
+        ? "Too many failed admin attempts. Locked for 30 seconds."
+        : `Invalid authenticator code. ${MAX_ADMIN_AUTH_FAILURES - failedAttempts} attempts left.`,
+    )
+  }, [adminAuthenticatorCode, updateAdminAuth, vaultData.adminAuth])
 
   const addProfile = useCallback(async () => {
     if (!vaultRecord || !vaultKey || !newProfileName.trim() || !adminAuthenticated) return
@@ -2343,7 +2888,7 @@ export default function CredStore() {
                 <DialogHeader className="border-b border-white/10 px-4 pb-3 pt-4">
                   <DialogTitle className="text-sm">Local Device Sync</DialogTitle>
                   <DialogDescription className="text-xs text-gray-400">
-                    Sync encrypted vault data locally with QR. No internet connection is used.
+                    Pair devices with a short QR/OTP, then transfer the encrypted vault over a local device channel.
                   </DialogDescription>
                 </DialogHeader>
                 <div className="min-h-0 space-y-3 overflow-y-auto overscroll-contain px-4 pb-16 pt-3 sm:pb-4">
@@ -2354,7 +2899,8 @@ export default function CredStore() {
                       onClick={() => {
                         setSyncMode("client")
                         setSyncMessage("")
-                        if (!syncPayload) createSyncCode()
+                        setBluetoothMessage("")
+                        if (!syncPairingQr) createSyncCode()
                       }}
                       className={`text-xs transition-all active:scale-95 ${
                         syncMode === "client"
@@ -2369,8 +2915,10 @@ export default function CredStore() {
                       variant={syncMode === "receiver" ? "default" : "outline"}
                       onClick={() => {
                         setSyncMode("receiver")
-                        setManualSyncCode("")
-                        setSyncMessage("Receiver ready. Tap Open Camera and Scan.")
+                        setSyncOtpInput("")
+                        setExpectedSyncPairing(null)
+                        setBluetoothMessage("")
+                        setSyncMessage("Receiver ready. Scan the pairing QR or enter the OTP.")
                       }}
                       className={`text-xs transition-all active:scale-95 ${
                         syncMode === "receiver"
@@ -2388,10 +2936,10 @@ export default function CredStore() {
                             <LogoMark className="h-5 w-5" />
                             CredStore One-Time Sync
                           </div>
-                          {syncPayload ? (
+                          {syncPairingQr ? (
                           <QrRenderBoundary
-                            key={syncPayload}
-                            onError={() => setSyncMessage("QR generation failed. Generate a new one-time QR.")}
+                            key={syncPairingQr}
+                            onError={() => setSyncMessage("Pairing QR generation failed. Generate a new pairing QR.")}
                           >
                             <div
                               className={
@@ -2400,9 +2948,9 @@ export default function CredStore() {
                               }
                             >
                               <QRCodeCanvas
-                                value={syncPayload}
+                                value={syncPairingQr}
                                 size={224}
-                                level="L"
+                                level="M"
                                 includeMargin
                                 imageSettings={{
                                   src: RUNTIME_LOGO_PATH,
@@ -2431,33 +2979,43 @@ export default function CredStore() {
                         onClick={createSyncCode}
                         className="w-full bg-gradient-to-r from-purple-500 to-blue-500 text-sm"
                       >
-                        Generate One-Time QR / Code
+                        Generate Pairing QR / OTP
                       </Button>
-                      {syncPayload && (
-                        <div className="space-y-2 rounded-md border border-white/10 bg-white/5 p-3">
-                          <div className="flex items-center justify-between gap-2">
-                            <p className="text-xs font-medium text-gray-200">One-time PC code</p>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              onClick={() => copyToClipboard(syncPayload)}
-                              className="h-7 border-white/20 bg-white/5 px-2 text-xs text-white hover:bg-white/10"
-                            >
-                              <Copy className="mr-1 h-3 w-3" />
-                              Copy
-                            </Button>
-                          </div>
-                          <Textarea
-                            value={syncPayload}
-                            readOnly
-                            className="min-h-[72px] border-white/20 bg-black/20 font-mono text-[11px] text-white"
-                          />
+                      <div className="space-y-2 rounded-md border border-white/10 bg-white/5 p-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-xs font-medium text-gray-200">Local encrypted transfer</p>
+                          <Badge className="bg-white/10 text-gray-300">LAN / Bluetooth</Badge>
                         </div>
-                      )}
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={loadBluetoothReceivers}
+                          disabled={!syncPayload}
+                          className="w-full border-white/20 bg-white/5 text-sm text-white hover:bg-white/10"
+                        >
+                          Find Nearby Receivers
+                        </Button>
+                        {bluetoothDevices.map((device) => (
+                          <Button
+                            key={device.id}
+                            type="button"
+                            variant="outline"
+                            onClick={() => sendBluetoothSyncPayload(device)}
+                            className="w-full justify-start border-white/20 bg-white/5 text-sm text-white hover:bg-white/10"
+                          >
+                            Send encrypted payload to {device.name || device.id}
+                          </Button>
+                        ))}
+                        <p className="text-xs text-gray-400">
+                          QR/OTP only pairs the devices. Desktop uses local Wi-Fi/LAN; mobile uses the native local
+                          Bluetooth bridge. The vault payload remains encrypted.
+                        </p>
+                      </div>
                       <div className="rounded-md border border-white/10 bg-white/5 p-3">
                         <p className="text-xs text-gray-300">
-                          Open receiver mode on the other device. Scan the QR on phones/laptops with a camera, or copy this
-                          one-time code between PCs. CredStore merges data without erasing receiver data.
+                          Open receiver mode on the other device, scan this pairing QR or type the OTP, then send the
+                          encrypted payload over LAN/Bluetooth local transport. CredStore merges data without erasing receiver
+                          data.
                         </p>
                       </div>
                       <p className="text-xs text-gray-300">
@@ -2481,36 +3039,61 @@ export default function CredStore() {
                           playsInline
                         />
                         <p className="mt-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-                          Scan One-Time QR
-                        </p>
+                        Scan Pairing QR
+                      </p>
                       </div>
                       <Button onClick={scanSyncQr} className="w-full bg-gradient-to-r from-purple-500 to-blue-500 text-sm">
                         Open Camera and Scan
                       </Button>
                       <div className="space-y-2 rounded-md border border-white/10 bg-white/5 p-3">
-                        <Label className="text-xs">Enter one-time PC code</Label>
-                        <Textarea
-                          value={manualSyncCode}
-                          onChange={(event) => setManualSyncCode(event.target.value)}
-                          className="min-h-[84px] border-white/20 bg-black/20 font-mono text-[11px] text-white"
-                          placeholder="Paste one-time code from the client device"
+                        <Label className="text-xs">Pairing OTP</Label>
+                        <Input
+                          value={syncOtpInput}
+                          onChange={(event) => setSyncOtpInput(event.target.value.toUpperCase())}
+                          className="h-10 border-white/20 bg-black/20 font-mono text-sm uppercase tracking-[0.25em] text-white"
+                          maxLength={8}
+                          placeholder="77C74FA2"
                         />
+                        <p className="text-xs text-gray-400">
+                          Scan the pairing QR to fill this automatically, or type the 8-character OTP from the client.
+                        </p>
+                      </div>
+                      <div className="space-y-2 rounded-md border border-white/10 bg-white/5 p-3">
                         <Button
                           type="button"
-                          variant="outline"
-                          onClick={() => importSyncPayload(manualSyncCode)}
-                          disabled={!manualSyncCode.trim()}
-                          className="w-full border-white/20 bg-white/5 text-sm text-white hover:bg-white/10"
+                          onClick={startBluetoothSyncReceiver}
+                          disabled={isBluetoothReceiving || (!expectedSyncPairing && !syncOtpInput.trim())}
+                          className="w-full bg-gradient-to-r from-purple-500 to-blue-500 text-sm"
                         >
-                          Import One-Time Code
+                          {isBluetoothReceiving ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Waiting for Payload
+                            </>
+                          ) : (
+                            "Start Local Payload Receiver"
+                          )}
                         </Button>
+                        {isBluetoothReceiving && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={stopBluetoothSyncReceiver}
+                            className="w-full border-white/20 bg-white/5 text-sm text-white hover:bg-white/10"
+                          >
+                            Stop Receiver
+                          </Button>
+                        )}
+                        <p className="text-xs text-gray-400">
+                          The receiver imports only a payload matching the scanned QR or typed OTP.
+                        </p>
                       </div>
                       <p className="text-xs text-gray-300">
-                        Scan the client QR or paste the client code. CredStore imports the encrypted vault automatically
-                        after a valid QR/code is read.
+                        Pair first, then receive the encrypted local payload. No vault data is stored in the QR.
                       </p>
                     </div>
                   )}
+                  {bluetoothMessage && <p className="text-xs text-blue-200">{bluetoothMessage}</p>}
                   {syncDone && (
                     <div className="flex items-center gap-3 rounded-md border border-emerald-400/30 bg-emerald-500/10 p-3 text-emerald-100">
                       <CheckCircle2 className="h-7 w-7 animate-pulse text-emerald-300" />
@@ -2793,13 +3376,16 @@ export default function CredStore() {
                           <div className="flex items-center justify-between gap-2">
                             <Label className="text-xs">Admin Authentication</Label>
                             <Badge className={adminAuthenticated ? "bg-emerald-500/20 text-emerald-200" : "bg-white/10 text-gray-300"}>
-                              {adminAuthenticated ? "Authenticated" : vaultData.adminAuth?.passwordHash ? "Locked" : "Setup"}
+                              {adminAuthenticated
+                                ? "Authenticated"
+                                : vaultData.adminAuth?.passwordHash || vaultData.adminAuth?.otpSecret
+                                  ? "Locked"
+                                  : "Setup"}
                             </Badge>
                           </div>
                           <p className="text-xs text-gray-400">
-                            Authenticate before changing employees, project groups, or credential visibility. Passkey
-                            prompts use the local OS/browser WebAuthn stack; Microsoft Authenticator phone passkeys work
-                            when that stack exposes cross-device passkeys.
+                            Authenticate before changing employees, project groups, or credential visibility. Use a local
+                            admin password or an offline authenticator app. The authenticator QR never contacts a server.
                           </p>
                           <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
                             <Input
@@ -2819,26 +3405,50 @@ export default function CredStore() {
                               {vaultData.adminAuth?.passwordHash ? "Authenticate" : "Set Password"}
                             </Button>
                           </div>
-                          <div className="grid gap-2 sm:grid-cols-2">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              onClick={registerAdminPasskey}
-                              className="border-white/20 bg-white/5 text-xs text-white hover:bg-white/10"
-                            >
-                              <Smartphone className="mr-1 h-3 w-3" />
-                              Register Passkey
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              onClick={authenticateAdminPasskey}
-                              disabled={!vaultData.adminAuth?.passkeyCredentialId}
-                              className="border-white/20 bg-white/5 text-xs text-white hover:bg-white/10"
-                            >
-                              <Key className="mr-1 h-3 w-3" />
-                              Authenticator / Passkey
-                            </Button>
+                          <div className="space-y-2 rounded-md border border-white/10 bg-black/10 p-3">
+                            <div className="flex items-center justify-between gap-2">
+                              <Label className="text-xs">Offline Authenticator</Label>
+                              <Badge className={vaultData.adminAuth?.otpSecret ? "bg-emerald-500/20 text-emerald-200" : "bg-white/10 text-gray-300"}>
+                                {vaultData.adminAuth?.otpSecret ? "Registered" : "Not registered"}
+                              </Badge>
+                            </div>
+                            {adminAuthenticatorUri && (
+                              <div className="rounded-md bg-white p-3 text-center text-gray-900">
+                                <div className="mb-2 flex items-center justify-center gap-2 text-xs font-semibold">
+                                  <ShieldCheck className="h-4 w-4 text-purple-700" />
+                                  CredStore Admin Authenticator
+                                </div>
+                                <QRCodeCanvas value={adminAuthenticatorUri} size={184} level="M" includeMargin />
+                              </div>
+                            )}
+                            <Input
+                              value={adminAuthenticatorCode}
+                              onChange={(event) => setAdminAuthenticatorCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                              className="border-white/20 bg-white/5 text-center font-mono text-lg tracking-[0.35em] text-white"
+                              inputMode="numeric"
+                              placeholder="000000"
+                            />
+                            <div className="grid gap-2 sm:grid-cols-2">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={startAdminAuthenticatorSetup}
+                                className="border-white/20 bg-white/5 text-xs text-white hover:bg-white/10"
+                              >
+                                <QrCode className="mr-1 h-3 w-3" />
+                                Generate Setup QR
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={adminAuthenticatorSecret ? confirmAdminAuthenticatorSetup : authenticateAdminAuthenticator}
+                                disabled={isAdminAuthLocked || adminAuthenticatorCode.length !== 6 || (!adminAuthenticatorSecret && !vaultData.adminAuth?.otpSecret)}
+                                className="border-white/20 bg-white/5 text-xs text-white hover:bg-white/10"
+                              >
+                                <Key className="mr-1 h-3 w-3" />
+                                {adminAuthenticatorSecret ? "Verify Setup Code" : "Authenticator Login"}
+                              </Button>
+                            </div>
                           </div>
                           {isAdminAuthLocked && (
                             <p className="text-xs text-amber-300">Locked for {Math.ceil(adminAuthLockoutRemaining / 1000)}s after failed attempts.</p>

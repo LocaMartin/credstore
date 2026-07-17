@@ -15,4 +15,11 @@ contextBridge.exposeInMainWorld("credstoreNative", {
   bluetooth: {
     isAvailable: () => ipcRenderer.invoke("credstore:bluetooth:is-available"),
   },
+  localSync: {
+    isAvailable: () => ipcRenderer.invoke("credstore:local-sync:is-available"),
+    discoverReceivers: (options) => ipcRenderer.invoke("credstore:local-sync:discover-receivers", options),
+    startReceiver: (options) => ipcRenderer.invoke("credstore:local-sync:start-receiver", options),
+    sendPayload: (options) => ipcRenderer.invoke("credstore:local-sync:send-payload", options),
+    stopReceiver: () => ipcRenderer.invoke("credstore:local-sync:stop-receiver"),
+  },
 })

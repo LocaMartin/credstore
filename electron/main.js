@@ -2,9 +2,16 @@ const { app, BrowserWindow, Menu, ipcMain, safeStorage, session, systemPreferenc
 const path = require("path")
 const fs = require("fs")
 const crypto = require("crypto")
+const net = require("net")
+const dgram = require("dgram")
+const os = require("os")
 const { spawn } = require("child_process")
 const isDev = process.env.NODE_ENV === "development"
 const isDebug = isDev || process.env.CREDSTORE_DEBUG === "1"
+const DESKTOP_SYNC_UDP_PORT = 47844
+const DESKTOP_SYNC_MAX_PAYLOAD_BYTES = 8 * 1024 * 1024
+const DESKTOP_SYNC_DISCOVERY_TIMEOUT_MS = 2500
+let desktopSyncReceiver = null
 
 app.commandLine.appendSwitch("enable-features", "WebBluetooth")
 
@@ -219,6 +226,44 @@ ipcMain.handle("credstore:bluetooth:is-available", async () => {
   return { available: false, code: "UNSUPPORTED", message: "Bluetooth sync is unsupported on this platform." }
 })
 
+ipcMain.handle("credstore:local-sync:is-available", async () => {
+  return {
+    available: true,
+    code: "AVAILABLE",
+    message: "Desktop local Wi-Fi sync is available on this computer.",
+  }
+})
+
+ipcMain.handle("credstore:local-sync:discover-receivers", async (_event, options) => {
+  const otp = sanitizeOtp(options?.otp)
+  if (!otp) throw new Error("Pairing OTP is required")
+  return discoverDesktopSyncReceivers(otp)
+})
+
+ipcMain.handle("credstore:local-sync:start-receiver", async (_event, options) => {
+  const otp = sanitizeOtp(options?.otp)
+  const checksum = sanitizeBridgeText(options?.checksum, 32)
+  if (!otp) throw new Error("Pairing OTP is required")
+  return startDesktopSyncReceiver({ otp, checksum })
+})
+
+ipcMain.handle("credstore:local-sync:send-payload", async (_event, options) => {
+  const host = sanitizeHost(options?.host)
+  const port = Number(options?.port)
+  const otp = sanitizeOtp(options?.otp)
+  const checksum = sanitizeBridgeText(options?.checksum, 32)
+  const payload = sanitizeBridgeText(options?.payload, DESKTOP_SYNC_MAX_PAYLOAD_BYTES)
+  if (!host || !Number.isInteger(port) || port < 1 || port > 65535 || !otp || !payload) {
+    throw new Error("host, port, otp, and payload are required")
+  }
+  return sendDesktopSyncPayload({ host, port, otp, checksum, payload })
+})
+
+ipcMain.handle("credstore:local-sync:stop-receiver", async () => {
+  stopDesktopSyncReceiver(new Error("Desktop receiver stopped"))
+  return {}
+})
+
 function getIconPath() {
   let iconPath
   if (process.platform === "win32") {
@@ -236,6 +281,19 @@ function sanitizeBridgeText(value, maxLength) {
   return String(value || "")
     .replace(/[\u0000-\u001F\u007F]/g, "")
     .slice(0, maxLength)
+}
+
+function sanitizeOtp(value) {
+  return String(value || "")
+    .replace(/[^A-Za-z0-9]/g, "")
+    .toUpperCase()
+    .slice(0, 12)
+}
+
+function sanitizeHost(value) {
+  const host = String(value || "").trim()
+  if (!/^[A-Za-z0-9.:%-]+$/.test(host)) return ""
+  return host.slice(0, 255)
 }
 
 async function getDesktopBiometricAvailability() {
@@ -291,6 +349,243 @@ function commandExists(command) {
     child.on("error", () => resolve(false))
     child.on("close", (code) => resolve(code === 0))
   })
+}
+
+function getDesktopSyncDeviceName() {
+  return `${os.hostname() || "CredStore Desktop"}`
+}
+
+function getDesktopSyncDeviceId() {
+  return crypto.createHash("sha256").update(`${os.hostname()}-${os.userInfo().username}`).digest("hex").slice(0, 12)
+}
+
+function createDesktopSyncAnnouncement(receiver) {
+  return JSON.stringify({
+    type: "credstore-sync-receiver",
+    version: 1,
+    otp: receiver.otp,
+    host: getPrimaryLanAddress(),
+    port: receiver.port,
+    name: getDesktopSyncDeviceName(),
+    id: getDesktopSyncDeviceId(),
+  })
+}
+
+function getPrimaryLanAddress() {
+  for (const addresses of Object.values(os.networkInterfaces())) {
+    for (const address of addresses || []) {
+      if (address.family === "IPv4" && !address.internal) return address.address
+    }
+  }
+  return "127.0.0.1"
+}
+
+function getBroadcastTargets() {
+  const targets = new Set(["255.255.255.255"])
+  for (const addresses of Object.values(os.networkInterfaces())) {
+    for (const address of addresses || []) {
+      if (address.family !== "IPv4" || address.internal || !address.netmask) continue
+      const ip = ipv4ToInt(address.address)
+      const mask = ipv4ToInt(address.netmask)
+      if (ip === null || mask === null) continue
+      targets.add(intToIpv4((ip & mask) | (~mask >>> 0)))
+    }
+  }
+  return Array.from(targets)
+}
+
+function ipv4ToInt(value) {
+  const parts = String(value).split(".").map((part) => Number(part))
+  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) return null
+  return parts.reduce((result, part) => ((result << 8) | part) >>> 0, 0)
+}
+
+function intToIpv4(value) {
+  return [24, 16, 8, 0].map((shift) => (value >>> shift) & 255).join(".")
+}
+
+function startDesktopSyncReceiver({ otp, checksum }) {
+  stopDesktopSyncReceiver()
+
+  return new Promise((resolve, reject) => {
+    const server = net.createServer((socket) => {
+      const chunks = []
+      let size = 0
+
+      socket.on("data", (chunk) => {
+        size += chunk.length
+        if (size > DESKTOP_SYNC_MAX_PAYLOAD_BYTES) {
+          socket.destroy(new Error("Payload is too large"))
+          return
+        }
+        chunks.push(chunk)
+      })
+
+      socket.on("end", () => {
+        try {
+          const packet = JSON.parse(Buffer.concat(chunks).toString("utf8"))
+          if (packet.type !== "credstore-sync-payload" || packet.version !== 1) throw new Error("Invalid payload packet")
+          if (sanitizeOtp(packet.otp) !== otp) throw new Error("Pairing OTP mismatch")
+          const payload = sanitizeBridgeText(packet.payload, DESKTOP_SYNC_MAX_PAYLOAD_BYTES)
+          if (!payload) throw new Error("Payload is empty")
+          if (checksum && packet.checksum !== checksum) throw new Error("Pairing checksum mismatch")
+          if (packet.checksum && packet.checksum !== checksumTextNode(payload)) throw new Error("Payload checksum mismatch")
+
+          const receiver = desktopSyncReceiver
+          stopDesktopSyncReceiver()
+          resolve({ payload, deviceName: packet.name || "Desktop client", deviceId: packet.id || "desktop" })
+          receiver?.server?.close()
+        } catch (error) {
+          reject(error)
+          stopDesktopSyncReceiver(error)
+        }
+      })
+    })
+
+    server.on("error", (error) => {
+      stopDesktopSyncReceiver(error)
+      reject(error)
+    })
+
+    server.listen(0, "0.0.0.0", () => {
+      const address = server.address()
+      const receiver = {
+        server,
+        udp: null,
+        interval: null,
+        otp,
+        checksum,
+        port: typeof address === "object" && address ? address.port : 0,
+      }
+      desktopSyncReceiver = receiver
+      startDesktopSyncAdvertisement(receiver, reject)
+    })
+  })
+}
+
+function startDesktopSyncAdvertisement(receiver, reject) {
+  const udp = dgram.createSocket("udp4")
+  receiver.udp = udp
+
+  udp.on("error", (error) => {
+    stopDesktopSyncReceiver(error)
+    reject(error)
+  })
+
+  udp.on("message", (message, remote) => {
+    try {
+      const request = JSON.parse(message.toString("utf8"))
+      if (request.type !== "credstore-sync-discover" || sanitizeOtp(request.otp) !== receiver.otp) return
+      const announcement = Buffer.from(createDesktopSyncAnnouncement(receiver))
+      udp.send(announcement, remote.port, remote.address)
+    } catch {
+      // Ignore unrelated LAN traffic.
+    }
+  })
+
+  udp.bind(DESKTOP_SYNC_UDP_PORT, () => {
+    udp.setBroadcast(true)
+    const announce = () => {
+      const message = Buffer.from(createDesktopSyncAnnouncement(receiver))
+      for (const target of getBroadcastTargets()) {
+        udp.send(message, DESKTOP_SYNC_UDP_PORT, target)
+      }
+    }
+    announce()
+    receiver.interval = setInterval(announce, 1000)
+  })
+}
+
+function stopDesktopSyncReceiver(error) {
+  const receiver = desktopSyncReceiver
+  desktopSyncReceiver = null
+  if (!receiver) return
+  if (receiver.interval) clearInterval(receiver.interval)
+  try {
+    receiver.udp?.close()
+  } catch {}
+  try {
+    receiver.server?.close()
+  } catch {}
+  if (error) console.error(`CredStore local sync receiver stopped: ${error.message}`)
+}
+
+function discoverDesktopSyncReceivers(otp) {
+  return new Promise((resolve, reject) => {
+    const socket = dgram.createSocket("udp4")
+    const found = new Map()
+    const request = Buffer.from(JSON.stringify({ type: "credstore-sync-discover", version: 1, otp }))
+    const timer = setTimeout(() => {
+      socket.close()
+      resolve({ devices: Array.from(found.values()) })
+    }, DESKTOP_SYNC_DISCOVERY_TIMEOUT_MS)
+
+    socket.on("error", (error) => {
+      clearTimeout(timer)
+      socket.close()
+      reject(error)
+    })
+
+    socket.on("message", (message, remote) => {
+      try {
+        const response = JSON.parse(message.toString("utf8"))
+        if (response.type !== "credstore-sync-receiver" || sanitizeOtp(response.otp) !== otp) return
+        const host = sanitizeHost(response.host) || remote.address
+        const port = Number(response.port)
+        if (!host || !Number.isInteger(port) || port < 1 || port > 65535) return
+        const id = `${host}:${port}`
+        found.set(id, {
+          id,
+          name: sanitizeBridgeText(response.name, 80) || "CredStore Desktop",
+          host,
+          port,
+          deviceId: sanitizeBridgeText(response.id, 80) || id,
+        })
+      } catch {
+        // Ignore unrelated LAN traffic.
+      }
+    })
+
+    socket.bind(() => {
+      socket.setBroadcast(true)
+      for (const target of getBroadcastTargets()) {
+        socket.send(request, DESKTOP_SYNC_UDP_PORT, target)
+      }
+    })
+  })
+}
+
+function sendDesktopSyncPayload({ host, port, otp, checksum, payload }) {
+  return new Promise((resolve, reject) => {
+    const socket = net.createConnection({ host, port, timeout: 5000 }, () => {
+      const packet = JSON.stringify({
+        type: "credstore-sync-payload",
+        version: 1,
+        otp,
+        checksum: checksum || checksumTextNode(payload),
+        payload,
+        name: getDesktopSyncDeviceName(),
+        id: getDesktopSyncDeviceId(),
+      })
+      socket.end(packet)
+    })
+
+    socket.on("timeout", () => socket.destroy(new Error("Connection timed out")))
+    socket.on("error", reject)
+    socket.on("close", (hadError) => {
+      if (!hadError) resolve({})
+    })
+  })
+}
+
+function checksumTextNode(value) {
+  let hash = 2166136261
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index)
+    hash = Math.imul(hash, 16777619)
+  }
+
+  return (hash >>> 0).toString(16).padStart(8, "0")
 }
 
 app.whenReady().then(() => {

@@ -1,6 +1,6 @@
 {
   "name": "credstore",
-  "version": "1.0.22",
+  "version": "1.0.23",
   "private": false,
   "description": "Secure Offline Credential Manager",
   "license": "AGPL-3.0-or-later",
@@ -47,7 +47,8 @@
     "clean:vault": "node scripts/clean-vault.js --yes",
     "clean:vault:dry-run": "node scripts/clean-vault.js --dry-run",
     "build:clean": "npm run clean && npm run build",
-    "postinstall": "node scripts/postinstall-desktop.js",
+    "postinstall": "node scripts/clean-vault.js --install --quiet && node scripts/postinstall-desktop.js",
+    "preuninstall": "node scripts/clean-vault.js --npm-uninstall --quiet",
     "test:security": "node scripts/security-smoke-test.mjs",
     "dist:clean": "npm run clean && npm run dist-linux",
     "prepack": "npm run export",

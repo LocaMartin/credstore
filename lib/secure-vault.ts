@@ -46,7 +46,7 @@ export interface KeySlot {
 }
 
 export interface BiometricKey {
-  platform: "android-keystore" | "capgo-secure-data" | "electron-safe-storage"
+  platform: "android-keystore" | "capgo-secure-data" | "electron-safe-storage" | "camera-face"
   encrypted: string
   iv: string
 }
@@ -118,7 +118,7 @@ export interface EnterpriseGroup {
 export interface EnterpriseAdminAuth {
   passwordHash?: string
   passwordSalt?: string
-  passkeyCredentialId?: string
+  otpSecret?: string
   failedAttempts?: number
   lockoutUntil?: number
   updatedAt: string

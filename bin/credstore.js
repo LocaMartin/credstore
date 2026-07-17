@@ -7,139 +7,57 @@ const path = require("path")
 const pkg = require("../package.json")
 
 const args = process.argv.slice(2)
-const debugMode = args.includes("-debug") || args.includes("--debug")
+const debugMode = args.includes("-debug")
+const desktopPlatforms = new Set(["linux", "darwin", "win32"])
 
-if (args.includes("--version") || args.includes("-version") || args.includes("-v")) {
+if (args.includes("-version")) {
   console.log(pkg.version)
   process.exit(0)
 }
 
-if (args.includes("--help") || args.includes("-help") || args.includes("-h")) {
+if (args.includes("-help")) {
   console.log(`CredStore ${pkg.version}
 
 Usage:
   credstore            Launch the CredStore desktop app
-  credstore --no-sandbox
-                       Launch in restricted Linux environments
-  credstore --install-desktop
-                       Add CredStore to the Linux app launcher
-  credstore --uninstall-desktop
-                       Remove CredStore from the Linux app launcher
-  credstore --clean-vault --yes
-                       Delete CredStore vault data and desktop app data on this computer
-  credstore --clean-uninstall --yes
-                       Delete vault/app data before uninstalling the npm package
   credstore -debug     Launch with debug logging and developer tools
-  credstore --debug    Launch with debug logging and developer tools
   credstore -version   Print the installed version
-  credstore --version  Print the installed version
   credstore -help      Show this help
-  credstore --help     Show this help
 `)
   process.exit(0)
 }
 
-const desktopFilePath = path.join(os.homedir(), ".local", "share", "applications", "credstore.desktop")
 const appRoot = path.resolve(__dirname, "..")
 const electronVersion = (pkg.optionalDependencies?.electron || pkg.devDependencies?.electron || "43.1.0").replace(/^[^\d]*/, "")
 
-function refreshDesktopDatabase() {
-  const applicationsDir = path.dirname(desktopFilePath)
-  const updater = spawn("update-desktop-database", [applicationsDir], {
-    stdio: "ignore",
-  })
-
-  updater.on("error", () => {})
+const allowedArgs = new Set(["-debug"])
+const unknownArgs = args.filter((arg) => !allowedArgs.has(arg))
+if (unknownArgs.length > 0) {
+  console.error(`Unknown option: ${unknownArgs.join(" ")}`)
+  console.error("Run credstore -help for usage.")
+  process.exit(1)
 }
 
-if (args.includes("--install-desktop")) {
-  if (process.platform !== "linux") {
-    console.error("Desktop launcher installation is only supported on Linux.")
-    process.exit(1)
-  }
-
-  const applicationsDir = path.dirname(desktopFilePath)
-  fs.mkdirSync(applicationsDir, { recursive: true })
-
-  const command = process.argv[1] || "credstore"
-  const iconPath = path.resolve(__dirname, "..", ".res", "logo.svg")
-  const desktopEntry = [
-    "[Desktop Entry]",
-    "Type=Application",
-    "Name=CredStore",
-    "Comment=Secure Offline Credential Manager",
-    `Exec=${command}`,
-    `Icon=${iconPath}`,
-    "Terminal=false",
-    "Categories=Utility;Security;",
-    "Keywords=password;credential;security;vault;",
-    "",
-  ].join("\n")
-
-  fs.writeFileSync(desktopFilePath, desktopEntry, { mode: 0o644 })
-  refreshDesktopDatabase()
-  console.log(`Installed desktop launcher: ${desktopFilePath}`)
-  process.exit(0)
-}
-
-if (args.includes("--uninstall-desktop")) {
-  if (fs.existsSync(desktopFilePath)) {
-    fs.unlinkSync(desktopFilePath)
-    refreshDesktopDatabase()
-  }
-
-  console.log(`Removed desktop launcher: ${desktopFilePath}`)
-  process.exit(0)
-}
-
-const shouldClean = args.includes("--clean-vault") || args.includes("--clean-uninstall")
-
-if (shouldClean) {
-  const cleanArgs = args.includes("--clean-uninstall") ? ["--clean-uninstall"] : []
-  if (args.includes("--yes")) cleanArgs.push("--yes")
-  if (args.includes("-y")) cleanArgs.push("-y")
-  if (args.includes("--dry-run")) cleanArgs.push("--dry-run")
-  if (args.includes("--mobile")) cleanArgs.push("--mobile")
-
-  const cleaner = path.join(appRoot, "scripts", "clean-vault.js")
-  const child = spawn(process.execPath, [cleaner, ...cleanArgs], {
-    stdio: "inherit",
-    env: process.env,
-  })
-
-  child.on("error", (error) => {
-    console.error(`Failed to clean CredStore vault data: ${error.message}`)
-    process.exit(1)
-  })
-
-  child.on("exit", (code) => {
-    process.exit(code || 0)
-  })
+if (debugMode && !desktopPlatforms.has(process.platform)) {
+  console.error("credstore -debug is only supported on Linux, macOS, and Windows desktop builds.")
+  process.exit(1)
 }
 
 const electronArgs = []
 const appArgs = []
 
-if (!shouldClean) {
-  for (const arg of args) {
-    if (arg === "--no-sandbox") {
-      electronArgs.push(arg)
-    } else if (arg === "-debug" || arg === "--debug") {
-      appArgs.push("--credstore-debug")
-    } else {
-      appArgs.push(arg)
-    }
-  }
-
-  if (process.env.CREDSTORE_NO_SANDBOX === "1" && !electronArgs.includes("--no-sandbox")) {
-    electronArgs.push("--no-sandbox")
-  }
-
-  launch().catch((error) => {
-    console.error(`Failed to launch CredStore: ${error.message}`)
-    process.exit(1)
-  })
+for (const arg of args) {
+  if (arg === "-debug") appArgs.push("--credstore-debug")
 }
+
+if (process.env.CREDSTORE_NO_SANDBOX === "1" && !electronArgs.includes("--no-sandbox")) {
+  electronArgs.push("--no-sandbox")
+}
+
+launch().catch((error) => {
+  console.error(`Failed to launch CredStore: ${error.message}`)
+  process.exit(1)
+})
 
 async function launch() {
   const electronPath = await resolveElectron()

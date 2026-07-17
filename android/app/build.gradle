@@ -23,8 +23,8 @@ android {
         applicationId "com.credstore.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 22
-        versionName "1.0.22"
+        versionCode 23
+        versionName "1.0.23"
         buildConfigField "String", "EXPECTED_ANDROID_CERT_SHA256", "\"${expectedAndroidCertSha256}\""
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
