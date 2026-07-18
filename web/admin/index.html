@@ -6,8 +6,12 @@
     <title>CredStore Admin</title>
     <meta name="robots" content="noindex, nofollow" />
     <link rel="icon" href="../res/img/logo.svg" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/easymde/dist/easymde.min.css" />
     <link rel="stylesheet" href="../res/css/index.css" />
     <script src="https://accounts.google.com/gsi/client" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/easymde/dist/easymde.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js" defer></script>
     <script src="../res/js/site.js" defer></script>
   </head>
@@ -62,7 +66,7 @@
             <div id="admin-feedback" class="list empty">Not loaded.</div>
           </section>
 
-          <section class="panel stack tab-panel" data-tab-panel="complaints">
+          <section class="panel stack tab-panel" data-tab-panel="complaints" hidden>
             <h3>Complaints</h3>
             <div class="search-row">
               <input id="transaction-search" placeholder="Search transaction ID" />
@@ -71,12 +75,12 @@
             <div id="admin-complaints" class="list empty">Not loaded.</div>
           </section>
 
-          <section class="panel stack tab-panel" data-tab-panel="vdp">
+          <section class="panel stack tab-panel" data-tab-panel="vdp" hidden>
             <h3>VDP Tickets</h3>
             <div id="admin-bugs" class="list empty">Not loaded.</div>
           </section>
 
-          <form id="response-form" class="panel stack tab-panel" data-tab-panel="response">
+          <form id="response-form" class="panel stack tab-panel" data-tab-panel="response" hidden>
             <h3>Ticket Response</h3>
             <label>
               Record ID
@@ -100,7 +104,7 @@
             <p id="response-status" class="muted"></p>
           </form>
 
-          <form id="certificate-form" class="certificate-panel stack tab-panel" data-tab-panel="certificate">
+          <form id="certificate-form" class="certificate-panel stack tab-panel" data-tab-panel="certificate" hidden>
             <h3>Premium Certificate Builder</h3>
             <label>
               Ticket / certificate ID
@@ -143,7 +147,7 @@
             <p id="certificate-status" class="muted"></p>
           </form>
 
-          <form id="hall-form" class="panel stack tab-panel" data-tab-panel="hall-entry">
+          <form id="hall-form" class="panel stack tab-panel" data-tab-panel="hall-entry" hidden>
             <h3>Hall of Fame Entry</h3>
             <label>
               Name
@@ -187,12 +191,12 @@
             <p id="hall-status" class="muted"></p>
           </form>
 
-          <section class="panel stack tab-panel" data-tab-panel="published-hall">
+          <section class="panel stack tab-panel" data-tab-panel="published-hall" hidden>
             <h3>Published Hall of Fame</h3>
             <div id="admin-hall" class="list empty">Not loaded.</div>
           </section>
 
-          <section class="panel stack tab-panel" data-tab-panel="chat">
+          <section class="panel stack tab-panel" data-tab-panel="chat" hidden>
             <h3>Ticket Chat</h3>
             <p class="muted small">
               Reply to feedback, complaint, and VDP tickets. Generate a certificate PDF first to attach it to the next

@@ -42,9 +42,9 @@ body.home-page {
 }
 
 main {
-  width: min(1680px, calc(100vw - 48px));
+  width: min(1760px, calc(100vw - 24px));
   margin: 0 auto;
-  padding: 40px 0;
+  padding: 28px 0;
 }
 
 .hero {
@@ -56,6 +56,7 @@ main {
 
 .compact-hero {
   min-height: 160px;
+  margin-bottom: 18px;
 }
 
 .home-hero {
@@ -271,6 +272,7 @@ code {
 }
 
 .tab-list {
+  position: relative;
   display: flex;
   gap: 10px;
   overflow-x: auto;
@@ -280,7 +282,25 @@ code {
   padding: 8px;
 }
 
+.tab-list::before {
+  content: "";
+  position: absolute;
+  top: 8px;
+  left: var(--tab-left, 8px);
+  width: var(--tab-width, 150px);
+  height: calc(100% - 16px);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 8px;
+  background: linear-gradient(135deg, var(--primary), var(--primary-2));
+  box-shadow: 0 14px 34px rgba(59, 130, 246, 0.18);
+  transition:
+    left 180ms ease,
+    width 180ms ease;
+}
+
 .tab-list button {
+  position: relative;
+  z-index: 1;
   flex: 1 0 max-content;
   min-width: 150px;
   border: 1px solid transparent;
@@ -297,8 +317,8 @@ code {
 }
 
 .tab-list button.is-active {
-  border-color: rgba(255, 255, 255, 0.22);
-  background: linear-gradient(135deg, var(--primary), var(--primary-2));
+  border-color: transparent;
+  background: transparent;
   color: white;
 }
 
@@ -308,11 +328,42 @@ code {
 
 .tab-panel.is-active {
   display: grid;
+  animation: tabFadeIn 160ms ease;
 }
 
 .tab-panel > .panel,
 .tab-panel.panel {
   margin-top: 0;
+}
+
+@keyframes tabFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.markdown-content {
+  display: grid;
+  gap: 8px;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.markdown-content p {
+  margin: 0;
+}
+
+.markdown-content code {
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.08);
+  padding: 1px 5px;
 }
 
 .admin-grid {

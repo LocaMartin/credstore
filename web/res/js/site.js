@@ -3,7 +3,7 @@ const googleClientId = "7346060566-39riegeih7sclmbcfenvqg9l2ggn0fnh.apps.googleu
 let currentLicense = "";
 let adminToken = "";
 let pendingCertificateAttachment = null;
-const markdownEditors = new WeakMap();
+const markdownEditors = new Map();
 
 function formData(form) {
   form.querySelectorAll("textarea[data-markdown-editor]").forEach((textarea) => {
@@ -73,12 +73,14 @@ function renderList(elementId, items, kind) {
       const screenshot = item.screenshot
         ? `<a href="${item.screenshot}" target="_blank" rel="noreferrer">Open screenshot</a>`
         : "";
+      const message = item.message || item.note || "";
+      const renderedMessage = kind === "bug" ? renderMarkdown(message) : escapeHtml(message);
       return `<article class="record">
         <strong>${escapeHtml(item.title || item.name || item.company || item.email || item.id)}</strong>
         <span>${escapeHtml(item.email || item.buyerEmail || "")}</span>
         <span>${escapeHtml(item.severity || item.transactionId || item.paymentReference || "")}</span>
-        <p>${escapeHtml(item.message || item.note || "")}</p>
-        ${item.response ? `<p class="admin-note">${escapeHtml(item.response)}</p>` : ""}
+        <div class="markdown-content">${renderedMessage}</div>
+        ${item.response ? `<div class="admin-note markdown-content">${renderMarkdown(item.response)}</div>` : ""}
         ${screenshot}
         <small>Chat messages: ${(item.chat || []).length}</small>
         <small>ID: ${escapeHtml(item.id || "")}</small>
@@ -149,6 +151,10 @@ function renderAdvisories(elementId, items) {
 }
 
 function renderMarkdown(value) {
+  if (window.marked && window.DOMPurify) {
+    window.marked.setOptions({ breaks: true, gfm: true });
+    return window.DOMPurify.sanitize(window.marked.parse(String(value || "")));
+  }
   return escapeHtml(value)
     .replace(/^### (.*)$/gm, "<h3>$1</h3>")
     .replace(/^## (.*)$/gm, "<h2>$1</h2>")
@@ -654,23 +660,35 @@ function initVdpPage() {
 
 function initTabs() {
   document.querySelectorAll("[data-tabs]").forEach((tabs) => {
+    const list = tabs.querySelector(".tab-list");
     const buttons = Array.from(tabs.querySelectorAll("[data-tab-target]"));
     const panels = Array.from(tabs.querySelectorAll("[data-tab-panel]"));
     if (!buttons.length || !panels.length) return;
 
+    const activeButton = () => buttons.find((button) => button.classList.contains("is-active"));
+    const syncIndicator = (button) => {
+      if (!list || !button) return;
+      tabs.style.setProperty("--tab-left", `${button.offsetLeft - list.scrollLeft}px`);
+      tabs.style.setProperty("--tab-width", `${button.offsetWidth}px`);
+    };
+
     const activate = (name) => {
+      let selectedButton = null;
       buttons.forEach((button) => {
         const active = button.dataset.tabTarget === name;
         button.classList.toggle("is-active", active);
         button.setAttribute("aria-selected", active ? "true" : "false");
+        if (active) selectedButton = button;
       });
       panels.forEach((panel) => {
         const active = panel.dataset.tabPanel === name;
         panel.classList.toggle("is-active", active);
         panel.hidden = !active;
       });
+      syncIndicator(selectedButton);
       setTimeout(() => {
         markdownEditors.forEach((editor) => editor.codemirror?.refresh?.());
+        syncIndicator(selectedButton);
       }, 0);
     };
 
@@ -678,8 +696,26 @@ function initTabs() {
       button.addEventListener("click", () => activate(button.dataset.tabTarget));
     });
 
-    activate(buttons.find((button) => button.classList.contains("is-active"))?.dataset.tabTarget || buttons[0].dataset.tabTarget);
+    const initial = activeButton() || buttons[0];
+    activate(initial.dataset.tabTarget);
+    list?.addEventListener("scroll", () => syncIndicator(activeButton()));
+    window.addEventListener("resize", () => syncIndicator(activeButton()));
   });
+}
+
+function initTitleEffect() {
+  const titles = document.body.classList.contains("admin-page")
+    ? ["CredStore Admin", "Feedback", "Complaints", "VDP Tickets", "Ticket Chat"]
+    : document.title.includes("Vulnerability")
+      ? ["CredStore VDP", "Submit Report", "Program Rules", "VDP Ticket Chat"]
+      : null;
+  if (!titles) return;
+  let index = 0;
+  setInterval(() => {
+    if (document.hidden) return;
+    document.title = titles[index % titles.length];
+    index += 1;
+  }, 1800);
 }
 
 function initPublicTicketChat() {
@@ -829,6 +865,7 @@ function initAdminPage() {
 window.addEventListener("load", () => {
   initMarkdownEditors();
   initTabs();
+  initTitleEffect();
   initKeyPage();
   initFncPage();
   initVdpPage();
