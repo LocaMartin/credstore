@@ -13,14 +13,6 @@
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://locamartin.github.io/credstore/web/hof/</loc>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://locamartin.github.io/credstore/web/advisory/</loc>
-    <priority>0.7</priority>
-  </url>
-  <url>
     <loc>https://locamartin.github.io/credstore/web/fnc/</loc>
     <priority>0.7</priority>
   </url>

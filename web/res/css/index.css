@@ -60,12 +60,12 @@ main {
 }
 
 .home-hero {
-  min-height: calc(100vh - 80px);
+  min-height: 760px;
 }
 
 .home-hero-grid {
   display: grid;
-  grid-template-columns: minmax(320px, 1fr) minmax(320px, 0.8fr);
+  grid-template-columns: minmax(520px, 1.35fr) minmax(320px, 0.65fr);
   align-items: center;
   gap: 28px;
 }
@@ -122,6 +122,16 @@ main {
 
 .hero-copy {
   max-width: 980px;
+}
+
+.home-hero-grid .hero-copy {
+  max-width: 1180px;
+}
+
+.home-hero-grid .hero-copy h1 {
+  max-width: 1120px;
+  font-size: clamp(48px, 4vw, 60px);
+  line-height: 1.04;
 }
 
 .compact-hero .hero-copy {
