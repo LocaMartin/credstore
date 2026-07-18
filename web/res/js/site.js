@@ -660,17 +660,11 @@ function initVdpPage() {
 
 function initTabs() {
   document.querySelectorAll("[data-tabs]").forEach((tabs) => {
-    const list = tabs.querySelector(".tab-list");
     const buttons = Array.from(tabs.querySelectorAll("[data-tab-target]"));
     const panels = Array.from(tabs.querySelectorAll("[data-tab-panel]"));
     if (!buttons.length || !panels.length) return;
 
     const activeButton = () => buttons.find((button) => button.classList.contains("is-active"));
-    const syncIndicator = (button) => {
-      if (!list || !button) return;
-      tabs.style.setProperty("--tab-left", `${button.offsetLeft - list.scrollLeft}px`);
-      tabs.style.setProperty("--tab-width", `${button.offsetWidth}px`);
-    };
 
     const activate = (name) => {
       let selectedButton = null;
@@ -684,11 +678,11 @@ function initTabs() {
         const active = panel.dataset.tabPanel === name;
         panel.classList.toggle("is-active", active);
         panel.hidden = !active;
+        panel.style.display = active ? "" : "none";
       });
-      syncIndicator(selectedButton);
+      selectedButton?.scrollIntoView?.({ behavior: "smooth", block: "nearest", inline: "nearest" });
       setTimeout(() => {
         markdownEditors.forEach((editor) => editor.codemirror?.refresh?.());
-        syncIndicator(selectedButton);
       }, 0);
     };
 
@@ -698,8 +692,6 @@ function initTabs() {
 
     const initial = activeButton() || buttons[0];
     activate(initial.dataset.tabTarget);
-    list?.addEventListener("scroll", () => syncIndicator(activeButton()));
-    window.addEventListener("resize", () => syncIndicator(activeButton()));
   });
 }
 
