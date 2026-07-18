@@ -264,6 +264,57 @@ code {
   margin-top: 18px;
 }
 
+.tab-shell {
+  display: grid;
+  gap: 18px;
+  margin-top: 18px;
+}
+
+.tab-list {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(10, 15, 30, 0.55);
+  padding: 8px;
+}
+
+.tab-list button {
+  flex: 1 0 max-content;
+  min-width: 150px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  padding: 11px 14px;
+  font-weight: 800;
+}
+
+.tab-list button:hover {
+  border-color: rgba(255, 255, 255, 0.18);
+  color: var(--text);
+}
+
+.tab-list button.is-active {
+  border-color: rgba(255, 255, 255, 0.22);
+  background: linear-gradient(135deg, var(--primary), var(--primary-2));
+  color: white;
+}
+
+.tab-panel {
+  display: none;
+}
+
+.tab-panel.is-active {
+  display: grid;
+}
+
+.tab-panel > .panel,
+.tab-panel.panel {
+  margin-top: 0;
+}
+
 .admin-grid {
   grid-template-columns: repeat(3, 1fr);
 }
@@ -747,6 +798,7 @@ pre {
   .workspace,
   .home-hero-grid,
   .section-grid,
+  .tab-shell,
   .pricing-grid,
   .security-grid,
   .feature-grid,
@@ -762,5 +814,9 @@ pre {
 
   h1 {
     font-size: 42px;
+  }
+
+  .tab-list button {
+    min-width: 132px;
   }
 }

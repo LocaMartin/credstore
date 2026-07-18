@@ -45,12 +45,24 @@
           <button id="admin-refresh" class="secondary" type="button">Refresh</button>
         </div>
 
-        <div class="admin-grid">
-          <section class="stack">
+        <section class="tab-shell" data-tabs>
+          <div class="tab-list" role="tablist" aria-label="Admin sections">
+            <button class="is-active" type="button" data-tab-target="feedback">Feedback</button>
+            <button type="button" data-tab-target="complaints">Complaints</button>
+            <button type="button" data-tab-target="vdp">VDP Tickets</button>
+            <button type="button" data-tab-target="response">Ticket Response</button>
+            <button type="button" data-tab-target="certificate">Certificate Builder</button>
+            <button type="button" data-tab-target="hall-entry">Hall of Fame Entry</button>
+            <button type="button" data-tab-target="published-hall">Published Hall of Fame</button>
+            <button type="button" data-tab-target="chat">Ticket Chat</button>
+          </div>
+
+          <section class="panel stack tab-panel is-active" data-tab-panel="feedback">
             <h3>Feedback</h3>
             <div id="admin-feedback" class="list empty">Not loaded.</div>
           </section>
-          <section class="stack">
+
+          <section class="panel stack tab-panel" data-tab-panel="complaints">
             <h3>Complaints</h3>
             <div class="search-row">
               <input id="transaction-search" placeholder="Search transaction ID" />
@@ -58,14 +70,13 @@
             </div>
             <div id="admin-complaints" class="list empty">Not loaded.</div>
           </section>
-          <section class="stack">
+
+          <section class="panel stack tab-panel" data-tab-panel="vdp">
             <h3>VDP Tickets</h3>
             <div id="admin-bugs" class="list empty">Not loaded.</div>
           </section>
-        </div>
 
-        <div class="admin-grid three">
-          <form id="response-form" class="stack">
+          <form id="response-form" class="panel stack tab-panel" data-tab-panel="response">
             <h3>Ticket Response</h3>
             <label>
               Record ID
@@ -89,7 +100,7 @@
             <p id="response-status" class="muted"></p>
           </form>
 
-          <form id="certificate-form" class="certificate-panel stack">
+          <form id="certificate-form" class="certificate-panel stack tab-panel" data-tab-panel="certificate">
             <h3>Premium Certificate Builder</h3>
             <label>
               Ticket / certificate ID
@@ -132,7 +143,7 @@
             <p id="certificate-status" class="muted"></p>
           </form>
 
-          <form id="hall-form" class="stack">
+          <form id="hall-form" class="panel stack tab-panel" data-tab-panel="hall-entry">
             <h3>Hall of Fame Entry</h3>
             <label>
               Name
@@ -175,37 +186,37 @@
             <button type="submit">Publish Entry</button>
             <p id="hall-status" class="muted"></p>
           </form>
-        </div>
 
-        <section class="stack">
-          <h3>Published Hall of Fame</h3>
-          <div id="admin-hall" class="list empty">Not loaded.</div>
-        </section>
+          <section class="panel stack tab-panel" data-tab-panel="published-hall">
+            <h3>Published Hall of Fame</h3>
+            <div id="admin-hall" class="list empty">Not loaded.</div>
+          </section>
 
-        <section class="panel stack">
-          <h3>Ticket Chat</h3>
-          <p class="muted small">
-            Reply to feedback, complaint, and VDP tickets. Generate a certificate PDF first to attach it to the next
-            chat message.
-          </p>
-          <form id="admin-chat-form" class="stack">
-            <label>
-              Record ID
-              <input name="id" required maxlength="120" placeholder="Paste ticket ID" />
-            </label>
-            <label>
-              Message
-              <textarea name="message" data-markdown-editor maxlength="6000" placeholder="Write a Markdown reply."></textarea>
-            </label>
-            <input name="attachmentName" type="hidden" />
-            <input name="attachmentData" type="hidden" />
-            <div class="actions">
-              <button type="submit">Send Chat Reply</button>
-              <button id="admin-chat-load" class="secondary" type="button">Load Chat</button>
-            </div>
-            <p id="admin-chat-status" class="muted"></p>
-          </form>
-          <div id="admin-chat-thread" class="chat-thread empty">No chat loaded.</div>
+          <section class="panel stack tab-panel" data-tab-panel="chat">
+            <h3>Ticket Chat</h3>
+            <p class="muted small">
+              Reply to feedback, complaint, and VDP tickets. Generate a certificate PDF first to attach it to the next
+              chat message.
+            </p>
+            <form id="admin-chat-form" class="stack">
+              <label>
+                Record ID
+                <input name="id" required maxlength="120" placeholder="Paste ticket ID" />
+              </label>
+              <label>
+                Message
+                <textarea name="message" data-markdown-editor maxlength="6000" placeholder="Write a Markdown reply."></textarea>
+              </label>
+              <input name="attachmentName" type="hidden" />
+              <input name="attachmentData" type="hidden" />
+              <div class="actions">
+                <button type="submit">Send Chat Reply</button>
+                <button id="admin-chat-load" class="secondary" type="button">Load Chat</button>
+              </div>
+              <p id="admin-chat-status" class="muted"></p>
+            </form>
+            <div id="admin-chat-thread" class="chat-thread empty">No chat loaded.</div>
+          </section>
         </section>
       </section>
     </main>

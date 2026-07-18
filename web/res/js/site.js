@@ -652,6 +652,36 @@ function initVdpPage() {
   initPublicTicketChat();
 }
 
+function initTabs() {
+  document.querySelectorAll("[data-tabs]").forEach((tabs) => {
+    const buttons = Array.from(tabs.querySelectorAll("[data-tab-target]"));
+    const panels = Array.from(tabs.querySelectorAll("[data-tab-panel]"));
+    if (!buttons.length || !panels.length) return;
+
+    const activate = (name) => {
+      buttons.forEach((button) => {
+        const active = button.dataset.tabTarget === name;
+        button.classList.toggle("is-active", active);
+        button.setAttribute("aria-selected", active ? "true" : "false");
+      });
+      panels.forEach((panel) => {
+        const active = panel.dataset.tabPanel === name;
+        panel.classList.toggle("is-active", active);
+        panel.hidden = !active;
+      });
+      setTimeout(() => {
+        markdownEditors.forEach((editor) => editor.codemirror?.refresh?.());
+      }, 0);
+    };
+
+    buttons.forEach((button) => {
+      button.addEventListener("click", () => activate(button.dataset.tabTarget));
+    });
+
+    activate(buttons.find((button) => button.classList.contains("is-active"))?.dataset.tabTarget || buttons[0].dataset.tabTarget);
+  });
+}
+
 function initPublicTicketChat() {
   const chatForm = document.getElementById("ticket-chat-form");
   if (!chatForm) return;
@@ -798,6 +828,7 @@ function initAdminPage() {
 
 window.addEventListener("load", () => {
   initMarkdownEditors();
+  initTabs();
   initKeyPage();
   initFncPage();
   initVdpPage();

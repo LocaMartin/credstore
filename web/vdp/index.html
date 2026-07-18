@@ -37,8 +37,14 @@
         </div>
       </header>
 
-      <section class="section-grid">
-        <article class="panel stack">
+      <section class="tab-shell" data-tabs>
+        <div class="tab-list" role="tablist" aria-label="VDP sections">
+          <button class="is-active" type="button" data-tab-target="submit">Submit Report</button>
+          <button type="button" data-tab-target="rules">Program Rules</button>
+          <button type="button" data-tab-target="chat">VDP Ticket Chat</button>
+        </div>
+
+        <article class="panel stack tab-panel is-active" data-tab-panel="submit">
           <h2>Submit Report</h2>
           <form id="bug-form" class="stack">
             <label>
@@ -89,7 +95,7 @@
           </form>
         </article>
 
-        <article class="panel stack">
+        <article class="panel stack tab-panel" data-tab-panel="rules">
           <h2>Program Rules</h2>
           <p class="muted">
             Do not access third-party data, publish active exploit details before remediation, or attack infrastructure
@@ -112,40 +118,40 @@
             <a href="/credstore/web/hof/">Hall of Fame</a> and advisory pages after validation.
           </p>
         </article>
-      </section>
 
-      <section class="panel stack">
-        <h2>VDP Ticket Chat</h2>
-        <p class="muted">
-          Continue a vulnerability report conversation with your ticket ID. Markdown formatting is supported.
-        </p>
-        <form id="ticket-chat-form" class="stack">
-          <div class="actions">
+        <article class="panel stack tab-panel" data-tab-panel="chat">
+          <h2>VDP Ticket Chat</h2>
+          <p class="muted">
+            Continue a vulnerability report conversation with your ticket ID. Markdown formatting is supported.
+          </p>
+          <form id="ticket-chat-form" class="stack">
+            <div class="actions">
+              <label>
+                Ticket ID
+                <input name="ticketId" required maxlength="120" />
+              </label>
+              <label>
+                Email
+                <input name="email" type="email" required maxlength="160" />
+              </label>
+            </div>
             <label>
-              Ticket ID
-              <input name="ticketId" required maxlength="120" />
+              Message
+              <textarea name="message" data-markdown-editor required maxlength="6000" placeholder="Add reproduction details, patch status, or follow-up notes."></textarea>
             </label>
             <label>
-              Email
-              <input name="email" type="email" required maxlength="160" />
+              Attachment
+              <input name="attachment" type="file" accept="image/png,image/jpeg,image/webp,application/pdf" />
+              <span class="small muted">Optional screenshot or PDF, up to 1 MB.</span>
             </label>
-          </div>
-          <label>
-            Message
-            <textarea name="message" data-markdown-editor required maxlength="6000" placeholder="Add reproduction details, patch status, or follow-up notes."></textarea>
-          </label>
-          <label>
-            Attachment
-            <input name="attachment" type="file" accept="image/png,image/jpeg,image/webp,application/pdf" />
-            <span class="small muted">Optional screenshot or PDF, up to 1 MB.</span>
-          </label>
-          <div class="actions">
-            <button type="submit">Send Message</button>
-            <button id="ticket-chat-load" class="secondary" type="button">Load Chat</button>
-          </div>
-          <p id="ticket-chat-status" class="muted"></p>
-        </form>
-        <div id="ticket-chat-thread" class="chat-thread empty">No chat loaded.</div>
+            <div class="actions">
+              <button type="submit">Send Message</button>
+              <button id="ticket-chat-load" class="secondary" type="button">Load Chat</button>
+            </div>
+            <p id="ticket-chat-status" class="muted"></p>
+          </form>
+          <div id="ticket-chat-thread" class="chat-thread empty">No chat loaded.</div>
+        </article>
       </section>
     </main>
   </body>
