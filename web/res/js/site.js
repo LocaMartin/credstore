@@ -753,51 +753,42 @@ function initTabs() {
       button.addEventListener("click", () => activate(button.dataset.tabTarget));
     });
 
-    const initial = activeButton() || buttons[0];
+    const hashTarget = {
+      "#submit": "submit",
+      "#program-rules": "rules",
+      "#rules": "rules",
+      "#ticket-chat": "chat",
+      "#chat": "chat",
+      "#hall-of-fame": "hall",
+      "#hall": "hall",
+      "#advisories": "advisories",
+      "#advisory": "advisories",
+    }[window.location.hash];
+    const initial = buttons.find((button) => button.dataset.tabTarget === hashTarget) || activeButton() || buttons[0];
     activate(initial.dataset.tabTarget);
+  });
+
+  document.querySelectorAll("[data-tab-jump]").forEach((link) => {
+    link.addEventListener("click", (event) => {
+      const target = link.dataset.tabJump;
+      const button = document.querySelector(`[data-tab-target="${target}"]`);
+      if (!button) return;
+      event.preventDefault();
+      button.click();
+      document.querySelector("[data-tabs]")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      history.replaceState(null, "", link.getAttribute("href") || window.location.pathname);
+    });
   });
 }
 
-function initTitleEffect() {
-  const titles = document.body.classList.contains("admin-page")
-    ? ["CredStore Admin", "Feedback", "Complaints", "VDP Tickets", "Ticket Chat"]
-    : document.title.includes("Vulnerability")
-      ? ["CredStore VDP", "Submit Report", "Program Rules", "VDP Ticket Chat"]
-      : null;
-  if (!titles) return;
-
-  if (window.jQuery) {
-    window.jQuery.titleEffect =
-      window.jQuery.titleEffect ||
-      ((options = {}) => {
-        const configuredTitles = options.titles || titles;
-        const delay = Number(options.delay || 1800);
-        const effect = options.effect || "replace";
-        const separator = options.separator || " • ";
-        let index = 0;
-        let scrollIndex = 0;
-        const scrollText = `${configuredTitles.join(separator)}${separator}`;
-        setInterval(() => {
-          if (document.hidden) return;
-          if (effect === "scroll") {
-            document.title = scrollText.slice(scrollIndex) + scrollText.slice(0, scrollIndex);
-            scrollIndex = (scrollIndex + 1) % scrollText.length;
-            return;
-          }
-          document.title = configuredTitles[index % configuredTitles.length];
-          index += 1;
-        }, delay);
-      });
-    window.jQuery.titleEffect({ effect: "scroll", separator: " | ", delay: 300, titles });
+function setStaticPageTitle() {
+  if (document.body.classList.contains("admin-page")) {
+    document.title = "CredStore Admin";
     return;
   }
-
-  let index = 0;
-  setInterval(() => {
-    if (document.hidden) return;
-    document.title = titles[index % titles.length];
-    index += 1;
-  }, 1800);
+  if (document.title.includes("Vulnerability") || document.querySelector(".brand strong")?.textContent?.includes("VDP")) {
+    document.title = "CredStore VDP";
+  }
 }
 
 function safeInit(name, callback) {
@@ -958,7 +949,7 @@ function initAdminPage() {
 
 window.addEventListener("load", () => {
   safeInit("tabs", initTabs);
-  safeInit("title", initTitleEffect);
+  safeInit("title", setStaticPageTitle);
   safeInit("markdown", initMarkdownEditors);
   safeInit("key page", initKeyPage);
   safeInit("feedback page", initFncPage);

@@ -7,17 +7,11 @@
     <meta name="description" content="Report CredStore vulnerabilities and view the public hall of fame." />
     <link rel="icon" href="../res/img/logo.svg" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/easymde/dist/easymde.min.css" />
-    <link rel="stylesheet" href="../res/css/index.css?v=20260718-tabs4" />
-    <script
-      src="https://code.jquery.com/jquery-3.4.1.slim.min.js"
-      integrity="sha384-J6qa4849blE2+poT4WnyKhv5vZF5SrPo0iEjwBvKU7imGFAV0wwj1yYfoRSJoZ+n"
-      crossorigin="anonymous"
-      defer
-    ></script>
+    <link rel="stylesheet" href="../res/css/index.css?v=20260718-vdptabs5" />
     <script src="https://cdn.jsdelivr.net/npm/easymde/dist/easymde.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js" defer></script>
-    <script src="../res/js/site.js?v=20260718-tabs4" defer></script>
+    <script src="../res/js/site.js?v=20260718-vdptabs5" defer></script>
   </head>
   <body>
     <main>
@@ -30,8 +24,8 @@
           <div class="top-actions">
             <a href="/credstore/">Home</a>
             <a href="/credstore/web/key/">License Key</a>
-            <a href="/credstore/web/hof/">Hall of Fame</a>
-            <a href="/credstore/web/advisory/">Advisories</a>
+            <a href="#hall-of-fame" data-tab-jump="hall">Hall of Fame</a>
+            <a href="#advisories" data-tab-jump="advisories">Advisories</a>
             <a href="/credstore/web/fnc/">Feedback</a>
           </div>
         </nav>
@@ -50,6 +44,8 @@
           <button class="is-active" type="button" data-tab-target="submit">Submit Report</button>
           <button type="button" data-tab-target="rules">Program Rules</button>
           <button type="button" data-tab-target="chat">VDP Ticket Chat</button>
+          <button type="button" data-tab-target="hall">Hall of Fame</button>
+          <button type="button" data-tab-target="advisories">Advisories</button>
         </div>
 
         <article class="panel stack tab-panel is-active" data-tab-panel="submit">
@@ -159,6 +155,23 @@
             <p id="ticket-chat-status" class="muted"></p>
           </form>
           <div id="ticket-chat-thread" class="chat-thread empty">No chat loaded.</div>
+        </article>
+
+        <article id="hall-of-fame" class="panel stack tab-panel" data-tab-panel="hall" hidden>
+          <h2>Hall of Fame</h2>
+          <p class="muted">
+            Validated good-faith reports are published here after remediation and reporter approval.
+          </p>
+          <div id="hall-public" class="list empty">No public entries yet.</div>
+        </article>
+
+        <article id="advisories" class="panel stack tab-panel" data-tab-panel="advisories" hidden>
+          <h2>Security Advisories</h2>
+          <p class="muted">
+            Public advisories include the affected version range, CVSS score, validated impact, reporter recognition,
+            and remediation summary.
+          </p>
+          <div id="advisory-public" class="list empty">No public advisories yet.</div>
         </article>
       </section>
     </main>
