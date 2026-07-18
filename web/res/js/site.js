@@ -710,12 +710,47 @@ function initTitleEffect() {
       ? ["CredStore VDP", "Submit Report", "Program Rules", "VDP Ticket Chat"]
       : null;
   if (!titles) return;
+
+  if (window.jQuery) {
+    window.jQuery.titleEffect =
+      window.jQuery.titleEffect ||
+      ((options = {}) => {
+        const configuredTitles = options.titles || titles;
+        const delay = Number(options.delay || 1800);
+        const effect = options.effect || "replace";
+        const separator = options.separator || " • ";
+        let index = 0;
+        let scrollIndex = 0;
+        const scrollText = `${configuredTitles.join(separator)}${separator}`;
+        setInterval(() => {
+          if (document.hidden) return;
+          if (effect === "scroll") {
+            document.title = scrollText.slice(scrollIndex) + scrollText.slice(0, scrollIndex);
+            scrollIndex = (scrollIndex + 1) % scrollText.length;
+            return;
+          }
+          document.title = configuredTitles[index % configuredTitles.length];
+          index += 1;
+        }, delay);
+      });
+    window.jQuery.titleEffect({ effect: "scroll", separator: " | ", delay: 300, titles });
+    return;
+  }
+
   let index = 0;
   setInterval(() => {
     if (document.hidden) return;
     document.title = titles[index % titles.length];
     index += 1;
   }, 1800);
+}
+
+function safeInit(name, callback) {
+  try {
+    callback();
+  } catch (error) {
+    console.error(`CredStore ${name} init failed`, error);
+  }
 }
 
 function initPublicTicketChat() {
@@ -863,11 +898,11 @@ function initAdminPage() {
 }
 
 window.addEventListener("load", () => {
-  initMarkdownEditors();
-  initTabs();
-  initTitleEffect();
-  initKeyPage();
-  initFncPage();
-  initVdpPage();
-  initAdminPage();
+  safeInit("tabs", initTabs);
+  safeInit("title", initTitleEffect);
+  safeInit("markdown", initMarkdownEditors);
+  safeInit("key page", initKeyPage);
+  safeInit("feedback page", initFncPage);
+  safeInit("vdp page", initVdpPage);
+  safeInit("admin page", initAdminPage);
 });
