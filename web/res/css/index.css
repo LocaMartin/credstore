@@ -633,6 +633,140 @@ pre {
   display: none;
 }
 
+.vdp-report-list {
+  display: grid;
+  gap: 10px;
+  max-height: 420px;
+  overflow: auto;
+}
+
+.vdp-report-list.empty {
+  min-height: 86px;
+  place-items: center;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+}
+
+.vdp-report-row {
+  display: grid;
+  grid-template-columns: minmax(170px, 0.9fr) minmax(280px, 1.8fr) minmax(130px, 0.55fr) minmax(120px, 0.55fr);
+  overflow: hidden;
+  border: 1px solid rgba(196, 181, 253, 0.28);
+  border-radius: 8px;
+  background:
+    radial-gradient(circle at 0% 0%, rgba(168, 85, 247, 0.22), transparent 42%),
+    linear-gradient(135deg, rgba(109, 40, 217, 0.18), rgba(59, 130, 246, 0.1)),
+    rgba(255, 255, 255, 0.04);
+}
+
+.vdp-report-row button,
+.vdp-report-cell {
+  display: grid;
+  gap: 4px;
+  align-content: center;
+  min-width: 0;
+  border: 0;
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  padding: 12px;
+  text-align: left;
+}
+
+.vdp-report-row button {
+  cursor: pointer;
+}
+
+.vdp-report-row button:hover,
+.vdp-report-row button:focus-visible {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.vdp-report-row > :last-child {
+  border-right: 0;
+}
+
+.vdp-report-label {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.vdp-report-value {
+  overflow-wrap: anywhere;
+  color: var(--text);
+  font-weight: 800;
+}
+
+.vdp-report-detail {
+  display: grid;
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.vdp-report-detail[hidden] {
+  display: none;
+}
+
+.report-detail-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
+  gap: 14px;
+}
+
+.report-markdown-card,
+.report-action-card,
+.report-chat-card {
+  border: 1px solid rgba(196, 181, 253, 0.26);
+  border-radius: 8px;
+  background:
+    radial-gradient(circle at 0% 0%, rgba(168, 85, 247, 0.2), transparent 42%),
+    linear-gradient(135deg, rgba(109, 40, 217, 0.18), rgba(59, 130, 246, 0.08)),
+    rgba(255, 255, 255, 0.04);
+  padding: 14px;
+}
+
+.report-body {
+  max-height: 360px;
+  overflow: auto;
+}
+
+.report-contact-card {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.report-contact-card div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.58);
+  padding: 12px;
+}
+
+.report-contact-card strong {
+  overflow-wrap: anywhere;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  color: #e5e7eb;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 4px 10px;
+}
+
 .forbidden {
   max-width: 780px;
   margin: 0 auto;
@@ -943,5 +1077,21 @@ pre {
   .tab-list button {
     min-width: max-content;
     padding: 10px 14px;
+  }
+
+  .vdp-report-row,
+  .report-detail-grid,
+  .report-contact-card {
+    grid-template-columns: 1fr;
+  }
+
+  .vdp-report-row button,
+  .vdp-report-cell {
+    border-right: 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .vdp-report-row > :first-child {
+    border-top: 0;
   }
 }

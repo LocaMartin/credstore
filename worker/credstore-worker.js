@@ -164,11 +164,12 @@ async function handleAdminResponse(request, env) {
   const input = await readJson(request);
   const id = sanitizeText(input.id, 120);
   const status = sanitizeChoice(input.status, ["new", "reviewing", "waiting-payment-check", "resolved", "rejected"], "new");
+  const severity = sanitizeChoice(input.severity, ["Critical", "High", "Medium", "Low", "Informational"], "");
   const response = sanitizeText(input.response || "", 2000);
   const key = await findRecordKey(env, id);
   if (!key) throw new PublicError("Ticket ID not found.", 404);
   const record = await env.CREDSTORE_DATA.get(key, "json");
-  const updated = { ...record, status, response, updatedAt: new Date().toISOString() };
+  const updated = { ...record, status, severity: severity || record.severity, response, updatedAt: new Date().toISOString() };
   await env.CREDSTORE_DATA.put(key, JSON.stringify(updated));
   return json({ ok: true, item: updated });
 }

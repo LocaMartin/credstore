@@ -7,14 +7,14 @@
     <meta name="robots" content="noindex, nofollow" />
     <link rel="icon" href="../res/img/logo.svg" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/easymde/dist/easymde.min.css" />
-    <link rel="stylesheet" href="../res/css/index.css?v=20260718-vdptabs5" />
+    <link rel="stylesheet" href="../res/css/index.css?v=20260718-adminreport2" />
     <script src="https://accounts.google.com/gsi/client" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/easymde/dist/easymde.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/pdfobject@2.3.0/pdfobject.min.js" defer></script>
-    <script src="../res/js/site.js?v=20260718-vdptabs5" defer></script>
+    <script src="../res/js/site.js?v=20260718-adminreport2" defer></script>
   </head>
   <body class="admin-page is-forbidden">
     <main>
@@ -54,12 +54,9 @@
           <div class="tab-list" role="tablist" aria-label="Admin sections">
             <button class="is-active" type="button" data-tab-target="feedback">Feedback</button>
             <button type="button" data-tab-target="complaints">Complaints</button>
-            <button type="button" data-tab-target="vdp">VDP Tickets</button>
-            <button type="button" data-tab-target="response">Ticket Response</button>
+            <button type="button" data-tab-target="vdp">VDP Report</button>
             <button type="button" data-tab-target="certificate">Certificate Builder</button>
             <button type="button" data-tab-target="hall-entry">Hall of Fame Entry</button>
-            <button type="button" data-tab-target="published-hall">Published Hall of Fame</button>
-            <button type="button" data-tab-target="chat">Ticket Chat</button>
           </div>
 
           <section class="panel stack tab-panel is-active" data-tab-panel="feedback">
@@ -77,33 +74,88 @@
           </section>
 
           <section class="panel stack tab-panel" data-tab-panel="vdp" hidden>
-            <h3>VDP Tickets</h3>
-            <div id="admin-bugs" class="list empty">Not loaded.</div>
-          </section>
+            <div class="admin-section-head">
+              <div>
+                <h3>VDP Report</h3>
+                <p class="muted small">Review incoming vulnerability reports, update status/severity, and reply to the reporter.</p>
+              </div>
+              <span class="pill">Notifications</span>
+            </div>
+            <div id="admin-bugs" class="vdp-report-list empty">Not loaded.</div>
+            <section id="admin-vdp-detail" class="vdp-report-detail" hidden>
+              <div class="report-detail-grid">
+                <article class="report-markdown-card stack">
+                  <div class="admin-section-head">
+                    <div>
+                      <h3 id="admin-vdp-title">Select a report</h3>
+                      <p id="admin-vdp-meta" class="muted small">Click a hacker or bug report title above to load details.</p>
+                    </div>
+                    <span id="admin-vdp-severity" class="pill">Severity</span>
+                  </div>
+                  <div id="admin-vdp-report" class="markdown-content report-body">No report selected.</div>
+                </article>
 
-          <form id="response-form" class="panel stack tab-panel" data-tab-panel="response" hidden>
-            <h3>Ticket Response</h3>
-            <label>
-              Record ID
-              <input name="id" required maxlength="100" placeholder="Paste ticket ID" />
-            </label>
-            <label>
-              Status
-              <select name="status">
-                <option value="new">New</option>
-                <option value="reviewing">Reviewing</option>
-                <option value="waiting-payment-check">Waiting payment check</option>
-                <option value="resolved">Resolved</option>
-                <option value="rejected">Rejected</option>
-              </select>
-            </label>
-            <label>
-              Response note
-              <textarea name="response" data-markdown-editor maxlength="2000" placeholder="Admin response or follow-up note."></textarea>
-            </label>
-            <button type="submit">Save Response</button>
-            <p id="response-status" class="muted"></p>
-          </form>
+                <form id="response-form" class="stack report-action-card">
+                  <h3>Report Response</h3>
+                  <label>
+                    Report ID
+                    <input name="id" required maxlength="100" placeholder="Select a report or paste report ID" />
+                  </label>
+                  <label>
+                    Status
+                    <select name="status">
+                      <option value="new">New</option>
+                      <option value="reviewing">Reviewing</option>
+                      <option value="waiting-payment-check">Waiting payment check</option>
+                      <option value="resolved">Resolved</option>
+                      <option value="rejected">Rejected</option>
+                    </select>
+                  </label>
+                  <label>
+                    Severity
+                    <select name="severity">
+                      <option value="Critical">Critical</option>
+                      <option value="High">High</option>
+                      <option value="Medium">Medium</option>
+                      <option value="Low">Low</option>
+                      <option value="Informational">Informational</option>
+                    </select>
+                  </label>
+                  <label>
+                    Response note
+                    <textarea name="response" data-markdown-editor maxlength="2000" placeholder="Admin response or follow-up note."></textarea>
+                  </label>
+                  <button type="submit">Save Status / Response</button>
+                  <p id="response-status" class="muted"></p>
+                </form>
+              </div>
+
+              <section class="report-chat-card stack">
+                <h3>Report Chat</h3>
+                <p class="muted small">
+                  Continue the selected VDP report conversation. Markdown is supported; generated certificate PDFs are attached to the next message.
+                </p>
+                <form id="admin-chat-form" class="stack">
+                  <label>
+                    Report ID
+                    <input name="id" required maxlength="120" placeholder="Select a report or paste report ID" />
+                  </label>
+                  <label>
+                    Message
+                    <textarea name="message" data-markdown-editor maxlength="6000" placeholder="Write a Markdown reply."></textarea>
+                  </label>
+                  <input name="attachmentName" type="hidden" />
+                  <input name="attachmentData" type="hidden" />
+                  <div class="actions">
+                    <button type="submit">Send Chat Reply</button>
+                    <button id="admin-chat-load" class="secondary" type="button">Load Chat</button>
+                  </div>
+                  <p id="admin-chat-status" class="muted"></p>
+                </form>
+                <div id="admin-chat-thread" class="chat-thread empty">No report selected.</div>
+              </section>
+            </section>
+          </section>
 
           <form id="certificate-form" class="certificate-panel stack tab-panel" data-tab-panel="certificate" hidden>
             <h3>Premium Certificate Builder</h3>
@@ -203,38 +255,8 @@
             </label>
             <button type="submit">Publish Entry</button>
             <p id="hall-status" class="muted"></p>
+            <div id="admin-hall" class="list empty" hidden>Not loaded.</div>
           </form>
-
-          <section class="panel stack tab-panel" data-tab-panel="published-hall" hidden>
-            <h3>Published Hall of Fame</h3>
-            <div id="admin-hall" class="list empty">Not loaded.</div>
-          </section>
-
-          <section class="panel stack tab-panel" data-tab-panel="chat" hidden>
-            <h3>Ticket Chat</h3>
-            <p class="muted small">
-              Reply to feedback, complaint, and VDP tickets. Generate a certificate PDF first to attach it to the next
-              chat message.
-            </p>
-            <form id="admin-chat-form" class="stack">
-              <label>
-                Record ID
-                <input name="id" required maxlength="120" placeholder="Paste ticket ID" />
-              </label>
-              <label>
-                Message
-                <textarea name="message" data-markdown-editor maxlength="6000" placeholder="Write a Markdown reply."></textarea>
-              </label>
-              <input name="attachmentName" type="hidden" />
-              <input name="attachmentData" type="hidden" />
-              <div class="actions">
-                <button type="submit">Send Chat Reply</button>
-                <button id="admin-chat-load" class="secondary" type="button">Load Chat</button>
-              </div>
-              <p id="admin-chat-status" class="muted"></p>
-            </form>
-            <div id="admin-chat-thread" class="chat-thread empty">No chat loaded.</div>
-          </section>
         </section>
       </section>
     </main>

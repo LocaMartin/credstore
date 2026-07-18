@@ -5,6 +5,7 @@ let adminToken = "";
 let pendingCertificateAttachment = null;
 let certificatePreviewUrl = "";
 let certificatePreviewTimer = 0;
+let adminBugReports = [];
 const markdownEditors = new Map();
 
 function formData(form) {
@@ -64,6 +65,10 @@ function escapeHtml(value) {
 function renderList(elementId, items, kind) {
   const element = document.getElementById(elementId);
   if (!element) return;
+  if (kind === "bug") {
+    renderAdminBugReports(element, items);
+    return;
+  }
   if (!items.length) {
     element.className = "list empty";
     element.textContent = "No records.";
@@ -90,6 +95,128 @@ function renderList(elementId, items, kind) {
       </article>`;
     })
     .join("");
+}
+
+function reportHackerName(item) {
+  return item.name || item.hunterName || item.email || "Reporter";
+}
+
+function reportStatus(item) {
+  return item.status || "new";
+}
+
+function reportSeverity(item) {
+  return item.severity || "Informational";
+}
+
+function fillFormField(form, name, value) {
+  const field = form?.elements?.[name];
+  if (field) field.value = value || "";
+}
+
+function renderAdminBugReports(element, items) {
+  adminBugReports = Array.isArray(items) ? items : [];
+  if (!adminBugReports.length) {
+    element.className = "vdp-report-list empty";
+    element.textContent = "No VDP reports.";
+    return;
+  }
+
+  element.className = "vdp-report-list";
+  element.innerHTML = adminBugReports
+    .map((item) => {
+      const id = escapeHtml(item.id || "");
+      return `<article class="vdp-report-row">
+        <button type="button" data-report-action="hacker" data-report-id="${id}">
+          <span class="vdp-report-label">Hacker</span>
+          <span class="vdp-report-value">${escapeHtml(reportHackerName(item))}</span>
+        </button>
+        <button type="button" data-report-action="report" data-report-id="${id}">
+          <span class="vdp-report-label">Bug report title</span>
+          <span class="vdp-report-value">${escapeHtml(item.title || "Untitled report")}</span>
+        </button>
+        <span class="vdp-report-cell vdp-report-status">
+          <span class="vdp-report-label">Report status</span>
+          <span class="vdp-report-value">${escapeHtml(reportStatus(item))}</span>
+        </span>
+        <span class="vdp-report-cell vdp-report-severity">
+          <span class="vdp-report-label">Severity</span>
+          <span class="vdp-report-value">${escapeHtml(reportSeverity(item))}</span>
+        </span>
+      </article>`;
+    })
+    .join("");
+
+  element.querySelectorAll("[data-report-action]").forEach((button) => {
+    button.addEventListener("click", () => {
+      selectAdminBugReport(button.dataset.reportId, button.dataset.reportAction);
+    });
+  });
+}
+
+function fillAdminReportForms(item) {
+  const id = item.id || "";
+  const responseForm = document.getElementById("response-form");
+  fillFormField(responseForm, "id", id);
+  fillFormField(responseForm, "status", reportStatus(item));
+  fillFormField(responseForm, "severity", reportSeverity(item));
+  fillFormField(responseForm, "response", item.response || "");
+  if (responseForm?.elements?.response) {
+    markdownEditors.get(responseForm.elements.response)?.value(item.response || "");
+  }
+
+  const chatForm = document.getElementById("admin-chat-form");
+  fillFormField(chatForm, "id", id);
+  renderChat("admin-chat-thread", item.chat || []);
+
+  const certificateForm = document.getElementById("certificate-form");
+  fillFormField(certificateForm, "ticketId", id);
+  fillFormField(certificateForm, "hunterName", reportHackerName(item));
+  fillFormField(certificateForm, "cvssScore", item.cvssScore || "");
+  fillFormField(certificateForm, "severity", reportSeverity(item));
+  fillFormField(certificateForm, "title", item.title || "");
+  fillFormField(certificateForm, "bugDescription", item.message || item.note || "");
+  scheduleCertificatePreview(certificateForm);
+
+  const hallForm = document.getElementById("hall-form");
+  fillFormField(hallForm, "name", reportHackerName(item));
+  fillFormField(hallForm, "severity", reportSeverity(item));
+  fillFormField(hallForm, "cvssScore", item.cvssScore || "");
+  fillFormField(hallForm, "affectedVersion", item.affectedVersion || "");
+  fillFormField(hallForm, "title", item.title || "");
+  fillFormField(hallForm, "profileUrl", item.profileUrl || "");
+}
+
+function selectAdminBugReport(id, action = "report") {
+  const item = adminBugReports.find((report) => String(report.id || "") === String(id || ""));
+  if (!item) return;
+
+  const detail = document.getElementById("admin-vdp-detail");
+  const title = document.getElementById("admin-vdp-title");
+  const meta = document.getElementById("admin-vdp-meta");
+  const severity = document.getElementById("admin-vdp-severity");
+  const report = document.getElementById("admin-vdp-report");
+  if (!detail || !report) return;
+
+  detail.hidden = false;
+  if (title) title.textContent = item.title || "Untitled report";
+  if (meta) {
+    meta.textContent = `${reportHackerName(item)} - ${item.email || "no email"} - ${item.id || "no report id"}`;
+  }
+  if (severity) severity.textContent = `${reportSeverity(item)} - ${reportStatus(item)}`;
+
+  if (action === "hacker") {
+    report.innerHTML = `<div class="report-contact-card">
+      <div><span class="vdp-report-label">Mail ID</span><strong>${escapeHtml(item.email || "Not provided")}</strong></div>
+      <div><span class="vdp-report-label">Report ID</span><strong>${escapeHtml(item.id || "Not provided")}</strong></div>
+      <div><span class="vdp-report-label">Name</span><strong>${escapeHtml(reportHackerName(item))}</strong></div>
+    </div>`;
+  } else {
+    report.innerHTML = renderMarkdown(item.message || item.note || "No report details.");
+  }
+
+  fillAdminReportForms(item);
+  detail.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
 function renderHallEntries(elementId, items) {
@@ -594,6 +721,7 @@ async function loadPublicHall() {
 async function loadAdmin() {
   if (!adminToken) return;
   const status = document.getElementById("admin-status");
+  const selectedReportId = document.getElementById("response-form")?.elements?.id?.value || "";
   if (status) status.textContent = "Verifying admin access...";
   const response = await fetch(`${workerBase}/admin/items`, { headers: authHeaders() });
   const data = await response.json();
@@ -604,6 +732,7 @@ async function loadAdmin() {
   renderList("admin-complaints", data.complaints || [], "complaint");
   renderList("admin-bugs", data.bugs || [], "bug");
   renderList("admin-hall", data.hall || [], "hall");
+  if (selectedReportId) selectAdminBugReport(selectedReportId, "report");
   if (status) status.textContent = `Signed in as ${data.adminEmail}.`;
 }
 
@@ -882,11 +1011,14 @@ function initAdminPage() {
   scheduleCertificatePreview(certificateForm);
   document.getElementById("response-form")?.addEventListener("submit", async (event) => {
     event.preventDefault();
+    const form = event.currentTarget;
+    const values = formData(form);
     const status = document.getElementById("response-status");
     try {
-      await postJson("/admin/response", formData(event.currentTarget), authHeaders());
+      await postJson("/admin/response", values, authHeaders());
       if (status) status.textContent = "Response saved.";
       await loadAdmin();
+      selectAdminBugReport(values.id, "report");
     } catch (error) {
       if (status) status.textContent = error instanceof Error ? error.message : "Response save failed.";
     }
@@ -931,14 +1063,18 @@ function initAdminPage() {
   });
   document.getElementById("admin-chat-form")?.addEventListener("submit", async (event) => {
     event.preventDefault();
+    const form = event.currentTarget;
     const status = document.getElementById("admin-chat-status");
     try {
-      const values = formData(event.currentTarget);
+      const values = formData(form);
       const data = await postJson("/admin/ticket/chat", values, authHeaders());
       renderChat("admin-chat-thread", data.messages || []);
-      event.currentTarget.message.value = "";
-      event.currentTarget.attachmentName.value = "";
-      event.currentTarget.attachmentData.value = "";
+      const item = adminBugReports.find((report) => String(report.id || "") === String(values.id || ""));
+      if (item) item.chat = data.messages || [];
+      form.message.value = "";
+      form.attachmentName.value = "";
+      form.attachmentData.value = "";
+      markdownEditors.get(form.message)?.value("");
       pendingCertificateAttachment = null;
       if (status) status.textContent = "Admin chat message sent.";
     } catch (error) {
