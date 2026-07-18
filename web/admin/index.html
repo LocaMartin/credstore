@@ -7,7 +7,7 @@
     <meta name="robots" content="noindex, nofollow" />
     <link rel="icon" href="../res/img/logo.svg" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/easymde/dist/easymde.min.css" />
-    <link rel="stylesheet" href="../res/css/index.css?v=20260718-tabs4" />
+    <link rel="stylesheet" href="../res/css/index.css?v=20260718-pdfpreview1" />
     <script
       src="https://code.jquery.com/jquery-3.4.1.slim.min.js"
       integrity="sha384-J6qa4849blE2+poT4WnyKhv5vZF5SrPo0iEjwBvKU7imGFAV0wwj1yYfoRSJoZ+n"
@@ -19,7 +19,8 @@
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js" defer></script>
-    <script src="../res/js/site.js?v=20260718-tabs4" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/pdfobject@2.3.0/pdfobject.min.js" defer></script>
+    <script src="../res/js/site.js?v=20260718-pdfpreview1" defer></script>
   </head>
   <body class="admin-page is-forbidden">
     <main>
@@ -151,6 +152,19 @@
               <button id="save-template" class="secondary" type="button">Save Template</button>
             </div>
             <p id="certificate-status" class="muted"></p>
+            <section class="pdf-preview-card" aria-label="Certificate PDF preview">
+              <div class="pdf-preview-head">
+                <div>
+                  <p class="eyebrow">Live Preview</p>
+                  <h3>Certificate PDF</h3>
+                </div>
+                <span>PDFObject CDN with iframe fallback</span>
+              </div>
+              <div id="certificate-preview" class="pdf-preview-frame">
+                <p class="muted">Fill the certificate fields to generate a PDF preview.</p>
+              </div>
+              <p id="certificate-preview-status" class="muted small"></p>
+            </section>
           </form>
 
           <form id="hall-form" class="panel stack tab-panel" data-tab-panel="hall-entry" hidden>

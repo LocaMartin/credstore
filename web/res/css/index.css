@@ -647,6 +647,52 @@ pre {
   padding: 16px;
 }
 
+.pdf-preview-card {
+  display: grid;
+  gap: 12px;
+  border: 1px solid rgba(196, 181, 253, 0.26);
+  border-radius: 12px;
+  background:
+    radial-gradient(circle at 10% 0%, rgba(168, 85, 247, 0.2), transparent 34%),
+    linear-gradient(135deg, rgba(59, 130, 246, 0.12), rgba(11, 16, 32, 0.76));
+  padding: 14px;
+}
+
+.pdf-preview-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.pdf-preview-head h3,
+.pdf-preview-head p {
+  margin: 0;
+}
+
+.pdf-preview-head span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.pdf-preview-frame {
+  min-height: 620px;
+  overflow: hidden;
+  border: 1px solid rgba(196, 181, 253, 0.22);
+  border-radius: 10px;
+  background: #070b18;
+}
+
+.pdf-preview-frame iframe,
+.pdf-preview-frame embed,
+.pdf-preview-frame object {
+  display: block;
+  width: 100%;
+  min-height: 620px;
+  border: 0;
+  background: #070b18;
+}
+
 .editor-toolbar {
   display: flex;
   flex-wrap: wrap;

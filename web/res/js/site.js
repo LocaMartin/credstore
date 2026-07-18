@@ -3,6 +3,8 @@ const googleClientId = "7346060566-39riegeih7sclmbcfenvqg9l2ggn0fnh.apps.googleu
 let currentLicense = "";
 let adminToken = "";
 let pendingCertificateAttachment = null;
+let certificatePreviewUrl = "";
+let certificatePreviewTimer = 0;
 const markdownEditors = new Map();
 
 function formData(form) {
@@ -179,6 +181,7 @@ function initMarkdownEditors() {
   document.querySelectorAll("textarea[data-markdown-editor]").forEach((textarea) => {
     if (textarea.dataset.editorReady) return;
     textarea.dataset.editorReady = "true";
+    if (textarea.closest("#certificate-form")) return;
     if (window.EasyMDE) {
       const editor = new window.EasyMDE({
         element: textarea,
@@ -359,6 +362,31 @@ function setPdfHexColor(pdf, hex, target = "fill") {
   else pdf.setFillColor(parts[0], parts[1], parts[2]);
 }
 
+function interpolateRgb(start, end, ratio) {
+  return start.map((value, index) => Math.round(value + (end[index] - value) * ratio));
+}
+
+function drawWebsiteGradient(pdf, width, height) {
+  const left = [88, 28, 135];
+  const middle = [11, 16, 32];
+  const right = [29, 78, 216];
+  const step = 3;
+  for (let x = 0; x <= width; x += step) {
+    const ratio = x / width;
+    const rgb = ratio < 0.52
+      ? interpolateRgb(left, middle, ratio / 0.52)
+      : interpolateRgb(middle, right, (ratio - 0.52) / 0.48);
+    pdf.setFillColor(rgb[0], rgb[1], rgb[2]);
+    pdf.rect(x, 0, step + 1, height, "F");
+  }
+  pdf.setGState(new pdf.GState({ opacity: 0.22 }));
+  setPdfHexColor(pdf, "#8b5cf6");
+  pdf.circle(150, 70, 210, "F");
+  setPdfHexColor(pdf, "#3b82f6");
+  pdf.circle(760, 94, 190, "F");
+  pdf.setGState(new pdf.GState({ opacity: 1 }));
+}
+
 function sanitizeCertificateText(value, fallback = "") {
   return String(value || fallback)
     .replace(/[#*_`>\[\]()]/g, "")
@@ -377,14 +405,55 @@ function certificateId(values) {
   return `CS-VDP-${hash.toString(16).toUpperCase().padStart(8, "0")}`;
 }
 
-async function generateCertificatePdf(values) {
+function renderCertificatePreview(blob, fileName) {
+  const preview = document.getElementById("certificate-preview");
+  const status = document.getElementById("certificate-preview-status");
+  if (!preview) return;
+  if (certificatePreviewUrl) URL.revokeObjectURL(certificatePreviewUrl);
+  certificatePreviewUrl = URL.createObjectURL(blob);
+  preview.innerHTML = "";
+  const embedded = window.PDFObject?.embed?.(certificatePreviewUrl, "#certificate-preview", {
+    fallbackLink: `<a href="${certificatePreviewUrl}" target="_blank" rel="noopener">Open ${fileName}</a>`,
+    height: "620px",
+    pdfOpenParams: {
+      navpanes: 0,
+      toolbar: 0,
+      view: "FitH",
+    },
+  });
+  if (!embedded) {
+    const iframe = document.createElement("iframe");
+    iframe.title = "Certificate PDF preview";
+    iframe.src = `${certificatePreviewUrl}#toolbar=0&navpanes=0&view=FitH`;
+    iframe.loading = "lazy";
+    preview.append(iframe);
+  }
+  if (status) status.textContent = "PDF preview updated.";
+}
+
+function scheduleCertificatePreview(form) {
+  if (!form) return;
+  window.clearTimeout(certificatePreviewTimer);
+  certificatePreviewTimer = window.setTimeout(() => {
+    generateCertificatePdf(formData(form), { download: false, quiet: true }).catch(() => {
+      const status = document.getElementById("certificate-preview-status");
+      if (status) status.textContent = "PDF preview failed to generate.";
+    });
+  }, 300);
+}
+
+async function generateCertificatePdf(values, options = {}) {
+  const shouldDownload = options.download !== false;
   const jsPDF = window.jspdf?.jsPDF;
   if (!jsPDF) {
-    alert("PDF engine is still loading. Try again in a moment.");
+    const message = "PDF engine is still loading. Try again in a moment.";
+    if (!options.quiet) alert(message);
+    const status = document.getElementById("certificate-status");
+    if (status) status.textContent = message;
     return;
   }
   const status = document.getElementById("certificate-status");
-  if (status) status.textContent = "Generating premium certificate PDF...";
+  if (status && !options.quiet) status.textContent = "Generating premium certificate PDF...";
   const logoDataUrl = await loadLogoDataUrl();
   const id = certificateId(values);
   const hunterName = sanitizeCertificateText(values.hunterName, "Security Researcher");
@@ -402,23 +471,16 @@ async function generateCertificatePdf(values) {
   const issuedAt = new Date().toISOString().slice(0, 10);
   const pdf = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
 
-  setPdfHexColor(pdf, "#080a1f");
-  pdf.rect(0, 0, 842, 595, "F");
-  setPdfHexColor(pdf, "#11113b");
+  drawWebsiteGradient(pdf, 842, 595);
+  pdf.setGState(new pdf.GState({ opacity: 0.88 }));
+  setPdfHexColor(pdf, "#0b1020");
   pdf.roundedRect(28, 28, 786, 539, 34, 34, "F");
-  setPdfHexColor(pdf, "#12213f");
+  pdf.setGState(new pdf.GState({ opacity: 0.72 }));
+  setPdfHexColor(pdf, "#18213a");
   pdf.roundedRect(50, 50, 742, 495, 26, 26, "F");
-
-  pdf.setGState(new pdf.GState({ opacity: 0.08 }));
-  setPdfHexColor(pdf, "#8b5cf6");
-  pdf.circle(190, 92, 160, "F");
-  setPdfHexColor(pdf, "#3b82f6");
-  pdf.circle(722, 96, 150, "F");
-  setPdfHexColor(pdf, "#f6c85f");
-  pdf.circle(746, 488, 122, "F");
   pdf.setGState(new pdf.GState({ opacity: 1 }));
 
-  setPdfHexColor(pdf, "#f6c85f", "draw");
+  setPdfHexColor(pdf, "#c4b5fd", "draw");
   pdf.setLineWidth(2);
   pdf.roundedRect(66, 66, 710, 463, 18, 18, "S");
   pdf.setLineWidth(0.8);
@@ -442,7 +504,7 @@ async function generateCertificatePdf(values) {
   pdf.setTextColor(196, 181, 253);
   pdf.text(`Certificate ID: ${id}`, 560, 100, { maxWidth: 190 });
 
-  pdf.setTextColor(246, 200, 95);
+  pdf.setTextColor(196, 181, 253);
   pdf.setFontSize(14);
   pdf.text("CERTIFICATE OF APPRECIATION", 421, 152, { align: "center" });
   pdf.setTextColor(255, 255, 255);
@@ -473,7 +535,7 @@ async function generateCertificatePdf(values) {
 
   pdf.setFont("helvetica", "bold");
   pdf.setFontSize(12);
-  pdf.setTextColor(246, 200, 95);
+  pdf.setTextColor(147, 197, 253);
   pdf.text(`Severity: ${severity}`, 151, 460);
   pdf.text(`CVSS: ${cvssScore}`, 332, 460);
   pdf.text(`Issued: ${issuedAt}`, 456, 460);
@@ -507,8 +569,9 @@ async function generateCertificatePdf(values) {
     nameInput.value = pendingCertificateAttachment.name;
     dataInput.value = pendingCertificateAttachment.data;
   }
-  if (status) status.textContent = "PDF generated and attached to admin chat.";
-  pdf.save(fileName);
+  renderCertificatePreview(pdf.output("blob"), fileName);
+  if (status && !options.quiet) status.textContent = "PDF generated and attached to admin chat.";
+  if (shouldDownload) pdf.save(fileName);
 }
 
 // Hall of fame
@@ -818,10 +881,14 @@ function initAdminPage() {
     const data = await response.json();
     renderList("admin-complaints", response.ok ? data.items || [] : [], "transaction search");
   });
-  document.getElementById("certificate-form")?.addEventListener("submit", async (event) => {
+  const certificateForm = document.getElementById("certificate-form");
+  certificateForm?.addEventListener("submit", async (event) => {
     event.preventDefault();
-    await generateCertificatePdf(formData(event.currentTarget));
+    await generateCertificatePdf(formData(certificateForm));
   });
+  certificateForm?.addEventListener("input", () => scheduleCertificatePreview(certificateForm));
+  certificateForm?.addEventListener("change", () => scheduleCertificatePreview(certificateForm));
+  scheduleCertificatePreview(certificateForm);
   document.getElementById("response-form")?.addEventListener("submit", async (event) => {
     event.preventDefault();
     const status = document.getElementById("response-status");
