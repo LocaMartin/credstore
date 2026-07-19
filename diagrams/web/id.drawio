@@ -1,0 +1,65 @@
+<mxfile host="65bd71144e">
+    <diagram id="11CD7qO9wHBYdfyOvVr1" name="Page-1">
+        <mxGraphModel dx="1132" dy="784" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="700" pageHeight="1000" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="9" style="edgeStyle=none;html=1;entryX=0.5;entryY=0;entryDx=0;entryDy=0;exitX=1;exitY=0.75;exitDx=0;exitDy=0;" parent="1" source="2" target="8" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="605" y="186"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="10" style="edgeStyle=none;html=1;exitX=0;exitY=0.75;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" parent="1" source="2" target="6" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="107" y="189"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="2" value="Generate UUID ID" style="whiteSpace=wrap;html=1;" parent="1" vertex="1">
+                    <mxGeometry x="265" y="154" width="165" height="36" as="geometry"/>
+                </mxCell>
+                <mxCell id="11" value="" style="edgeStyle=none;html=1;" parent="1" source="3" target="2" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="19" style="edgeStyle=none;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" parent="1" target="3" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="480.953125" y="71" as="sourcePoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="3" value="Submit Report" style="whiteSpace=wrap;html=1;" parent="1" vertex="1">
+                    <mxGeometry x="287.5" y="56" width="114.5" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="6" value="chat id" style="whiteSpace=wrap;html=1;" parent="1" vertex="1">
+                    <mxGeometry x="64" y="244.5" width="80" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="8" value="PDF Certificate ID" style="whiteSpace=wrap;html=1;" parent="1" vertex="1">
+                    <mxGeometry x="552" y="244.5" width="112" height="31" as="geometry"/>
+                </mxCell>
+                <mxCell id="17" value="" style="endArrow=none;html=1;" parent="1" edge="1">
+                    <mxGeometry width="50" height="50" relative="1" as="geometry">
+                        <mxPoint x="481" y="102" as="sourcePoint"/>
+                        <mxPoint x="481" y="16" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="20" value="Report" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" parent="1" vertex="1">
+                    <mxGeometry x="479" y="11" width="54" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="21" value="Mail ID" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" parent="1" vertex="1">
+                    <mxGeometry x="478.5" y="28" width="55" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="22" value="Name" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" parent="1" vertex="1">
+                    <mxGeometry x="479" y="44" width="50" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="23" value="UUID direct login&lt;div&gt;&lt;font color=&quot;#000000&quot;&gt;No paaword needed&lt;/font&gt;&lt;/div&gt;&lt;div&gt;&lt;div style=&quot;&quot;&gt;Enter your UUID to login&lt;/div&gt;&lt;div style=&quot;&quot;&gt;What if you forget to save your UUID&lt;/div&gt;&lt;div style=&quot;&quot;&gt;Enter your mail id in &quot;Forget UUID&quot; form in the website, you will recive your UUID in mail(similar to forget password)&lt;/div&gt;&lt;/div&gt;&lt;div style=&quot;&quot;&gt;Rate Limit doesn&#39;t allow brute force &quot;Each failed attempt increase time&quot; more then 10 failed attempt one 1 ip blocked&lt;/div&gt;&lt;div style=&quot;&quot;&gt;&lt;br&gt;&lt;/div&gt;&lt;div style=&quot;&quot;&gt;&lt;br&gt;&lt;/div&gt;&lt;div style=&quot;&quot;&gt;&lt;br&gt;&lt;/div&gt;&lt;div style=&quot;&quot;&gt;&lt;br&gt;&lt;/div&gt;" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" parent="1" vertex="1">
+                    <mxGeometry x="26" y="338" width="634" height="156" as="geometry"/>
+                </mxCell>
+                <mxCell id="24" value="Lokanath Pradhan" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" parent="1" vertex="1">
+                    <mxGeometry x="289.5" y="234" width="116" height="26" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>

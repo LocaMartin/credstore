@@ -1105,3 +1105,437 @@ pre {
     border-top: 0;
   }
 }
+/* Connected tab polish for admin/VDP portals. Keep this block late in cascade with
+   explicit selectors so old tab variants share one visual system. */
+.admin-shell,
+.admin-console,
+.portal-shell,
+.portal-card {
+  max-width: calc(100vw - 64px) !important;
+}
+
+.portal-tabs,
+.admin-tabs,
+.site-tabs,
+.tabs,
+[role="tablist"] {
+  align-items: flex-end !important;
+  gap: 4px !important;
+  margin: 18px 0 0 !important;
+  padding: 0 8px !important;
+  border: 0 !important;
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  scrollbar-width: none !important;
+}
+
+.portal-tabs::-webkit-scrollbar,
+.admin-tabs::-webkit-scrollbar,
+.site-tabs::-webkit-scrollbar,
+.tabs::-webkit-scrollbar,
+[role="tablist"]::-webkit-scrollbar,
+.portal-tabs::-webkit-scrollbar-button,
+.admin-tabs::-webkit-scrollbar-button,
+.site-tabs::-webkit-scrollbar-button,
+.tabs::-webkit-scrollbar-button,
+[role="tablist"]::-webkit-scrollbar-button {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+.portal-tab,
+.admin-tab,
+.tab-button,
+.tabs button,
+[data-tab],
+[data-admin-tab],
+[role="tab"] {
+  position: relative !important;
+  margin: 0 !important;
+  border: 1px solid rgba(167, 139, 250, 0.34) !important;
+  border-bottom-color: rgba(167, 139, 250, 0.28) !important;
+  border-radius: 8px 8px 0 0 !important;
+  background:
+    linear-gradient(115deg, rgba(50, 39, 91, 0.94), rgba(22, 42, 82, 0.94)) !important;
+  color: rgba(226, 232, 240, 0.78) !important;
+  box-shadow: none !important;
+}
+
+.portal-tab.active,
+.portal-tab.is-active,
+.portal-tab[aria-selected="true"],
+.admin-tab.active,
+.admin-tab.is-active,
+.admin-tab[aria-selected="true"],
+.tab-button.active,
+.tab-button.is-active,
+.tab-button[aria-selected="true"],
+.tabs button.active,
+.tabs button.is-active,
+.tabs button[aria-selected="true"],
+[data-tab].active,
+[data-tab].is-active,
+[data-tab][aria-selected="true"],
+[data-admin-tab].active,
+[data-admin-tab].is-active,
+[data-admin-tab][aria-selected="true"],
+[role="tab"].active,
+[role="tab"].is-active,
+[role="tab"][aria-selected="true"] {
+  z-index: 4 !important;
+  margin-bottom: -1px !important;
+  border-color: rgba(167, 139, 250, 0.56) !important;
+  border-bottom-color: transparent !important;
+  background:
+    radial-gradient(circle at 8% 0%, rgba(168, 85, 247, 0.36), transparent 34%),
+    linear-gradient(115deg, rgba(91, 51, 143, 0.98), rgba(46, 40, 96, 0.98) 46%, rgba(24, 43, 88, 0.98)) !important;
+  color: #fff !important;
+  box-shadow: 0 -8px 22px rgba(124, 58, 237, 0.16) !important;
+}
+
+.portal-tab.active::after,
+.portal-tab.is-active::after,
+.portal-tab[aria-selected="true"]::after,
+.admin-tab.active::after,
+.admin-tab.is-active::after,
+.admin-tab[aria-selected="true"]::after,
+.tab-button.active::after,
+.tab-button.is-active::after,
+.tab-button[aria-selected="true"]::after,
+.tabs button.active::after,
+.tabs button.is-active::after,
+.tabs button[aria-selected="true"]::after,
+[data-tab].active::after,
+[data-tab].is-active::after,
+[data-tab][aria-selected="true"]::after,
+[data-admin-tab].active::after,
+[data-admin-tab].is-active::after,
+[data-admin-tab][aria-selected="true"]::after,
+[role="tab"].active::after,
+[role="tab"].is-active::after,
+[role="tab"][aria-selected="true"]::after {
+  content: "";
+  position: absolute;
+  left: -1px;
+  right: -1px;
+  bottom: -2px;
+  height: 3px;
+  background:
+    linear-gradient(115deg, rgba(91, 51, 143, 0.98), rgba(46, 40, 96, 0.98) 46%, rgba(24, 43, 88, 0.98));
+  pointer-events: none;
+}
+
+.portal-panel,
+.admin-panel,
+.tab-panel,
+.tab-content,
+.tab-pane,
+[data-panel],
+[data-admin-panel] {
+  margin-top: -1px !important;
+  border: 1px solid rgba(167, 139, 250, 0.56) !important;
+  border-radius: 8px !important;
+  background:
+    radial-gradient(circle at 8% 0%, rgba(168, 85, 247, 0.36), transparent 34%),
+    linear-gradient(115deg, rgba(91, 51, 143, 0.98), rgba(46, 40, 96, 0.98) 46%, rgba(24, 43, 88, 0.98)) !important;
+  box-shadow: 0 24px 70px rgba(4, 8, 24, 0.30) !important;
+}
+
+.portal-tabs + .portal-panel,
+.portal-tabs + .tab-panel,
+.admin-tabs + .admin-panel,
+.site-tabs + .tab-panel,
+.tabs + .tab-panel,
+.tabs + .tab-content {
+  border-top-left-radius: 0 !important;
+}
+
+.portal-panel .card,
+.portal-panel .record-card,
+.portal-panel .ticket-card,
+.portal-panel .message-card,
+.portal-panel .report-card,
+.admin-panel .card,
+.admin-panel .record-card,
+.admin-panel .ticket-card,
+.admin-panel .message-card,
+.admin-panel .report-card,
+[data-admin-panel] .card,
+[data-admin-panel] .record-card,
+[data-admin-panel] .ticket-card,
+[data-admin-panel] .message-card,
+[data-admin-panel] .report-card {
+  background:
+    linear-gradient(115deg, rgba(111, 65, 166, 0.32), rgba(34, 51, 105, 0.58)) !important;
+  border-color: rgba(167, 139, 250, 0.26) !important;
+}
+
+@media (max-width: 760px) {
+  .admin-shell,
+  .admin-console,
+  .portal-shell,
+  .portal-card {
+    max-width: calc(100vw - 24px) !important;
+  }
+
+  .portal-tabs,
+  .admin-tabs,
+  .site-tabs,
+  .tabs,
+  [role="tablist"] {
+    padding-inline: 0 !important;
+  }
+}
+/* Admin/VDP connected tab polish. */
+:root {
+  --cs-tab-border: rgba(143, 111, 255, 0.5);
+  --cs-tab-border-soft: rgba(143, 111, 255, 0.24);
+  --cs-tab-active-gradient: linear-gradient(
+    115deg,
+    rgba(105, 55, 170, 0.98) 0%,
+    rgba(78, 48, 132, 0.94) 35%,
+    rgba(35, 43, 91, 0.94) 100%
+  );
+  --cs-tab-idle-gradient: linear-gradient(115deg, rgba(48, 41, 91, 0.82) 0%, rgba(24, 42, 85, 0.84) 100%);
+}
+
+body {
+  overflow-x: hidden;
+}
+
+.page,
+.page-shell,
+.portal,
+.portal-shell,
+.admin-shell,
+.site-shell,
+main,
+main > .container,
+.container {
+  max-width: min(100% - 64px, 1840px) !important;
+}
+
+.portal-card,
+.console-card,
+.admin-card,
+.dashboard-card,
+.section-card:has(.portal-tabs),
+.section-card:has(.admin-tabs),
+.section-card:has(.tab-list),
+.section-card:has([data-tab]),
+.section-card:has([data-admin-tab]) {
+  overflow: visible !important;
+}
+
+.portal-tabs,
+.admin-tabs,
+.site-tabs,
+.tabs,
+.tab-list,
+[role="tablist"] {
+  display: flex !important;
+  align-items: flex-end !important;
+  gap: 4px !important;
+  margin: 18px 0 0 !important;
+  padding: 0 8px !important;
+  border: 0 !important;
+  overflow-x: auto !important;
+  overflow-y: visible !important;
+  scrollbar-width: none !important;
+}
+
+.portal-tabs::-webkit-scrollbar,
+.admin-tabs::-webkit-scrollbar,
+.site-tabs::-webkit-scrollbar,
+.tabs::-webkit-scrollbar,
+.tab-list::-webkit-scrollbar,
+[role="tablist"]::-webkit-scrollbar {
+  display: none !important;
+}
+
+.portal-tab,
+.admin-tab,
+.site-tab,
+.tab-button,
+button[data-tab],
+button[data-admin-tab],
+[role="tab"] {
+  position: relative !important;
+  z-index: 1 !important;
+  flex: 0 0 auto !important;
+  min-height: 42px !important;
+  margin: 0 !important;
+  padding: 0 20px !important;
+  border: 1px solid var(--cs-tab-border-soft) !important;
+  border-bottom-color: var(--cs-tab-border-soft) !important;
+  border-radius: 8px 8px 0 0 !important;
+  background: var(--cs-tab-idle-gradient) !important;
+  color: rgba(245, 243, 255, 0.82) !important;
+  box-shadow: none !important;
+  transform: translateY(1px) !important;
+  transition:
+    color 160ms ease,
+    background 160ms ease,
+    border-color 160ms ease,
+    transform 160ms ease !important;
+}
+
+.portal-tab:hover,
+.admin-tab:hover,
+.site-tab:hover,
+.tab-button:hover,
+button[data-tab]:hover,
+button[data-admin-tab]:hover,
+[role="tab"]:hover {
+  color: #fff !important;
+  border-color: rgba(168, 139, 250, 0.56) !important;
+}
+
+.portal-tab.active,
+.portal-tab.is-active,
+.portal-tab.selected,
+.admin-tab.active,
+.admin-tab.is-active,
+.admin-tab.selected,
+.site-tab.active,
+.site-tab.is-active,
+.site-tab.selected,
+.tab-button.active,
+.tab-button.is-active,
+.tab-button.selected,
+button[data-tab].active,
+button[data-tab].is-active,
+button[data-tab].selected,
+button[data-admin-tab].active,
+button[data-admin-tab].is-active,
+button[data-admin-tab].selected,
+[role="tab"][aria-selected="true"] {
+  z-index: 4 !important;
+  background: var(--cs-tab-active-gradient) !important;
+  color: #fff !important;
+  border-color: var(--cs-tab-border) !important;
+  border-bottom-color: transparent !important;
+  transform: translateY(1px) !important;
+}
+
+.portal-tab.active::after,
+.portal-tab.is-active::after,
+.portal-tab.selected::after,
+.admin-tab.active::after,
+.admin-tab.is-active::after,
+.admin-tab.selected::after,
+.site-tab.active::after,
+.site-tab.is-active::after,
+.site-tab.selected::after,
+.tab-button.active::after,
+.tab-button.is-active::after,
+.tab-button.selected::after,
+button[data-tab].active::after,
+button[data-tab].is-active::after,
+button[data-tab].selected::after,
+button[data-admin-tab].active::after,
+button[data-admin-tab].is-active::after,
+button[data-admin-tab].selected::after,
+[role="tab"][aria-selected="true"]::after {
+  content: "";
+  position: absolute;
+  left: -1px;
+  right: -1px;
+  bottom: -2px;
+  height: 3px;
+  background: var(--cs-tab-active-gradient);
+}
+
+.portal-panel,
+.admin-panel,
+.tab-panel,
+.tab-content,
+[data-panel]:not([hidden]),
+[data-admin-panel]:not([hidden]) {
+  margin-top: 0 !important;
+  padding: 20px !important;
+  border: 1px solid var(--cs-tab-border) !important;
+  border-top-color: var(--cs-tab-border) !important;
+  border-radius: 0 8px 8px 8px !important;
+  background: var(--cs-tab-active-gradient) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04) !important;
+  overflow: visible !important;
+}
+
+[data-panel][hidden],
+[data-admin-panel][hidden],
+.tab-panel[hidden],
+.admin-panel[hidden],
+.portal-panel[hidden] {
+  display: none !important;
+}
+
+.portal-panel > .section-card,
+.admin-panel > .section-card,
+.tab-panel > .section-card,
+.tab-content > .section-card,
+.portal-panel .record-card,
+.admin-panel .record-card,
+.tab-panel .record-card,
+.tab-content .record-card,
+.portal-panel .ticket-card,
+.admin-panel .ticket-card,
+.tab-panel .ticket-card,
+.tab-content .ticket-card {
+  background: linear-gradient(115deg, rgba(103, 58, 169, 0.34), rgba(35, 43, 91, 0.72)) !important;
+  border-color: rgba(168, 139, 250, 0.28) !important;
+}
+
+.portal-panel h2,
+.portal-panel h3,
+.admin-panel h2,
+.admin-panel h3,
+.tab-panel h2,
+.tab-panel h3,
+.tab-content h2,
+.tab-content h3 {
+  margin-top: 0 !important;
+}
+
+@media (max-width: 780px) {
+  .page,
+  .page-shell,
+  .portal,
+  .portal-shell,
+  .admin-shell,
+  .site-shell,
+  main,
+  main > .container,
+  .container {
+    max-width: min(100% - 20px, 1840px) !important;
+  }
+
+  .portal-tabs,
+  .admin-tabs,
+  .site-tabs,
+  .tabs,
+  .tab-list,
+  [role="tablist"] {
+    padding: 0 4px !important;
+  }
+
+  .portal-tab,
+  .admin-tab,
+  .site-tab,
+  .tab-button,
+  button[data-tab],
+  button[data-admin-tab],
+  [role="tab"] {
+    padding: 0 14px !important;
+  }
+
+  .portal-panel,
+  .admin-panel,
+  .tab-panel,
+  .tab-content,
+  [data-panel]:not([hidden]),
+  [data-admin-panel]:not([hidden]) {
+    padding: 16px !important;
+  }
+}
